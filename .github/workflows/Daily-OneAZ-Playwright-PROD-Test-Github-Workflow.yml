@@ -37,5 +37,5 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: latest-oneaz-screenshots
-        path: ${{ env.LATEST_SCREENSHOT_DIR }}
+        path: fin-tests/PROD/screenshots_oneaz_*/chromium
         if-no-files-found: warn
