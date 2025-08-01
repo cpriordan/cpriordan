@@ -25,7 +25,7 @@ jobs:
         playwright install --with-deps
 
     - name: Run Playwright script
-      run: fin-tests/PROD/test_oneaz_business_prodtags_and_js_errors_on_chrome_for_github_actions_PROD.py
+      run: python fin-tests/PROD/test_oneaz_business_prodtags_and_js_errors_on_chrome_for_github_actions_PROD.py
 
     - name: Upload latest screenshots artifact
       run: |
