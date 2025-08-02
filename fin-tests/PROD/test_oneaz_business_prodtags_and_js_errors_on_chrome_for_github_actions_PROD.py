@@ -76,6 +76,7 @@ async def run():
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     screenshots_directory = os.path.join(base_dir, f'screenshots_{client}_{timestamp}', 'chromium')
+    print(f"::set-output name=LATEST_SCREENSHOT_DIR::{screenshots_directory}")  # GitHub Actions output for artifact upload
     os.makedirs(screenshots_directory, exist_ok=True)
     error_tracker = []
 
