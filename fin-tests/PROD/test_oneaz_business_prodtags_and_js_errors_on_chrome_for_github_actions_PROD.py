@@ -78,6 +78,9 @@ async def run():
     screenshots_directory = os.path.join(base_dir, f'screenshots_{client}_{timestamp}', 'chromium')
     print(f"::set-output name=LATEST_SCREENSHOT_DIR::{screenshots_directory}")  # GitHub Actions output for artifact upload
     os.makedirs(screenshots_directory, exist_ok=True)
+    # Write latest screenshot directory to GITHUB_ENV for use in later GitHub Actions steps
+    with open(os.environ.get('GITHUB_ENV', '/tmp/github_env'), 'a') as f:
+        f.write(f"LATEST_SCREENSHOT_DIR={screenshots_directory}\n")
     error_tracker = []
 
     async with async_playwright() as playwright:
