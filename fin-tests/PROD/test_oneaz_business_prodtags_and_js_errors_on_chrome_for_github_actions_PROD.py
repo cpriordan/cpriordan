@@ -71,7 +71,7 @@ async def run():
         'settings.js', 'controlbar.js', 'settings.js?code=oneaz', 'settings.js?code=oneaz:80'
     ]
 
-    base_dir = "PROD"
+    base_dir = "fin-tests/PROD"  # 🔧 Adjusted base directory for GitHub Actions artifact path
     clear_old_screenshot_directories(base_dir, client)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
