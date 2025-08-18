@@ -1,8 +1,9 @@
-# CHANGED: Prefer locally checked-out baseline file in CI (private repo),
-#          fall back to raw.githubusercontent.com only if not found locally.
-# NEW:     resolve_baseline_image() chooses the best source (local > $GITHUB_WORKSPACE > download)
-# NEW:     download supports optional GITHUB_TOKEN header to access private repos if needed.
-# (Everything else unchanged; OCR-only comparison retained.)
+# CHANGED/NEW NOTES
+# - Added true pixel-by-pixel diff alongside OCR: compare_images_ocr_and_pixels now returns
+#   (ocr_match: bool, pixels_ok: bool, details: str)
+# - Introduced _compute_pixel_diff_metrics() using PIL.ImageChops + RMS and changed-pixel %.
+# - Test now fails if OCR passes but pixels differ, and reports presence count of '.control-nav'.
+# - Clearly logs when OCR passes but pixel diffs are detected.
 
 import asyncio
 import pytest
@@ -15,7 +16,7 @@ from typing import Tuple, Optional
 from urllib.parse import urlparse  # existing
 from urllib.request import urlopen, Request  # CHANGED: Request added for headers
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
-from PIL import Image
+from PIL import Image, ImageChops, ImageStat  # CHANGED: import ImageChops, ImageStat
 import pytesseract
 from pytesseract import TesseractNotFoundError
 
@@ -302,40 +303,81 @@ async def align_viewport_to_baseline(page, baseline_img_path: Path, extra_height
     return bw, bh
 
 # =====================
-# OCR-only comparison (pixels ignored)
+# OCR + PIXEL comparison (CHANGED)
 # =====================
 
 def _normalize_text(txt: str) -> str:
     return " ".join(txt.split()).strip().lower()
 
 
-def compare_images_ocr_and_pixels(baseline_path: str | Path, current_path: str | Path, rms_threshold: float = 3.0) -> Tuple[bool, str]:
-    """OCR-only comparison. Returns (is_match, message)."""
+# NEW: compute image difference metrics (RMS + percent-changed)
+def _compute_pixel_diff_metrics(base_img: Image.Image, curr_img: Image.Image) -> Tuple[float, float]:
+    """Returns (overall_rms, percent_changed_0_100). Images are auto-cropped to common size."""
+    # Ensure same size by cropping to min common area
+    w = min(base_img.width, curr_img.width)
+    h = min(base_img.height, curr_img.height)
+    if base_img.size != (w, h):
+        base_img = base_img.crop((0, 0, w, h))
+    if curr_img.size != (w, h):
+        curr_img = curr_img.crop((0, 0, w, h))
+
+    diff = ImageChops.difference(base_img, curr_img)
+    stat = ImageStat.Stat(diff)
+    # stat.rms gives per-channel RMS; take mean across channels as "overall RMS"
+    overall_rms = sum(stat.rms) / len(stat.rms)
+
+    # Approximate percent of pixels with any change
+    # Convert to grayscale then count non-zero pixels
+    g = diff.convert("L")
+    hist = g.histogram()
+    total = sum(hist)
+    changed = total - hist[0]  # non-zero entries
+    percent_changed = (changed / total * 100.0) if total else 0.0
+    return overall_rms, percent_changed
+
+
+# CHANGED: now returns (ocr_match, pixels_ok, message)
+def compare_images_ocr_and_pixels(baseline_path: str | Path, current_path: str | Path, rms_threshold: float = 3.0) -> Tuple[bool, bool, str]:
     baseline_path = Path(baseline_path)
     current_path = Path(current_path)
     print(f"baseline_path is {baseline_path} and current_path is {current_path}")
 
     if not baseline_path.exists():
-        return False, f"Baseline image not found: {baseline_path}"
+        return False, False, f"Baseline image not found: {baseline_path}"
     if not current_path.exists():
-        return False, f"Current image not found: {current_path}"
-
-    if not TESSERACT_OK:
-        return False, "OCR-only mode: Tesseract not available on this machine."
+        return False, False, f"Current image not found: {current_path}"
 
     base_img = Image.open(baseline_path).convert('RGB')
     curr_img = Image.open(current_path).convert('RGB')
 
-    try:
-        base_txt = _normalize_text(pytesseract.image_to_string(base_img))
-        curr_txt = _normalize_text(pytesseract.image_to_string(curr_img))
-        print(f"[OCR-ONLY] baseline: '{base_txt}'")
-        print(f"[OCR-ONLY] current : '{curr_txt}'")
-        if base_txt and curr_txt and base_txt == curr_txt:
-            return True, "OCR text matches (pixels ignored by design)."
-        return False, f"OCR text differs.\nBaseline: '{base_txt}'\nCurrent : '{curr_txt}'"
-    except (TesseractNotFoundError, FileNotFoundError) as e:
-        return False, f"OCR failed: {e}"
+    # OCR branch
+    if not TESSERACT_OK:
+        ocr_match = False
+        ocr_msg = "OCR unavailable on this machine."
+    else:
+        try:
+            base_txt = _normalize_text(pytesseract.image_to_string(base_img))
+            curr_txt = _normalize_text(pytesseract.image_to_string(curr_img))
+            print(f"[OCR] baseline: '{base_txt}'")
+            print(f"[OCR] current : '{curr_txt}'")
+            ocr_match = bool(base_txt and curr_txt and base_txt == curr_txt)
+            ocr_msg = "OCR text matches." if ocr_match else (
+                f"OCR text differs.\nBaseline: '{base_txt}'\nCurrent : '{curr_txt}'"
+            )
+        except (TesseractNotFoundError, FileNotFoundError) as e:
+            ocr_match = False
+            ocr_msg = f"OCR failed: {e}"
+
+    # Pixel diff branch
+    overall_rms, pct_changed = _compute_pixel_diff_metrics(base_img, curr_img)
+    pixels_ok = overall_rms <= rms_threshold
+    px_msg = (
+        f"Pixel diff RMS={overall_rms:.2f} (≤ {rms_threshold}) and changed={pct_changed:.2f}% → {'OK' if pixels_ok else 'DIFF'}"
+    )
+
+    # Combined message
+    details = f"{ocr_msg} {px_msg}"
+    return ocr_match, pixels_ok, details
 
 # =====================
 # Browser fixture (CI-ready)
@@ -505,13 +547,26 @@ async def test_oneaz_hero_ocr_ci(
         await page.locator("#homeSlider").screenshot(path=str(current_hero_path))
         print("Saved hero section screenshot as hero_ad_only.png")
 
-        # OCR-only comparison
-        is_match, msg = compare_images_ocr_and_pixels(baseline_hero_path, current_hero_path, rms_threshold=3.0)
-        print(f"[OCR-ONLY-REASON] {msg}")
-        if not is_match:
-            pytest.fail(f"Hero image mismatch (OCR-only): {msg}")
-        else:
-            print(f"Hero image comparison passed (OCR-only): {msg}")
+        # OCR + PIXEL comparison (CHANGED)
+        ocr_match, pixels_ok, details = compare_images_ocr_and_pixels(baseline_hero_path, current_hero_path, rms_threshold=3.0)
+        print(f"[COMPARE] {details}")
+
+        # NEW: If OCR matches but pixel differences exist, include info about '.control-nav'
+        if ocr_match and not pixels_ok:
+            try:
+                control_nav_count = await page.locator(".control-nav").count()
+            except Exception:
+                control_nav_count = -1  # sentinel if query fails
+            extra = f" OCR PASSED, but pixel differences detected. '.control-nav' count={control_nav_count}."
+            pytest.fail("Hero image mismatch: " + details + extra)
+
+        # Original behaviors preserved
+        if not ocr_match:
+            pytest.fail(f"Hero image mismatch (OCR): {details}")
+        if not pixels_ok:
+            pytest.fail(f"Hero image mismatch (Pixels): {details}")
+
+        print("Hero image comparison passed (OCR + Pixels).")
 
         await wait_for_js_and_element(page, hero_heading_selector, timeout=45000)
         await page.wait_for_selector(hero_heading_selector, state='visible', timeout=45000)
