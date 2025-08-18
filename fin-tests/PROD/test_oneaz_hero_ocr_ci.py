@@ -1,8 +1,8 @@
-# CHANGED: Switch to **OCR-only** comparison; pixels ignored by design
-# CHANGED: Fetch baseline image from **GitHub** (raw URL) into the run folder
-# NEW: Auto headless in CI via env (HEADLESS/CI)
-# NEW: Support BASIC_AUTH_* from environment for GitHub Actions
-# NEW: Clear logging for OCR results and failure causes
+# CHANGED: Prefer locally checked-out baseline file in CI (private repo),
+#          fall back to raw.githubusercontent.com only if not found locally.
+# NEW:     resolve_baseline_image() chooses the best source (local > $GITHUB_WORKSPACE > download)
+# NEW:     download supports optional GITHUB_TOKEN header to access private repos if needed.
+# (Everything else unchanged; OCR-only comparison retained.)
 
 import asyncio
 import pytest
@@ -12,10 +12,10 @@ import os
 import shutil
 from pathlib import Path
 from typing import Tuple, Optional
-from urllib.parse import urlparse  # NEW
-from urllib.request import urlopen  # NEW
+from urllib.parse import urlparse  # existing
+from urllib.request import urlopen, Request  # CHANGED: Request added for headers
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
-from PIL import Image  # CHANGED: ImageChops not needed in OCR-only
+from PIL import Image
 import pytesseract
 from pytesseract import TesseractNotFoundError
 
@@ -33,7 +33,6 @@ def _configure_tesseract() -> bool:
         return True
     except Exception:
         pass
-    # CHANGED: Keep Windows fallbacks; on Ubuntu CI, tesseract is on PATH
     possible_paths = [
         r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
         r"C:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe",
@@ -81,11 +80,11 @@ async def save_page_source(page, filepath: str | Path):
         print(f"Failed to save page source: {e}")
 
 # =====================
-# GitHub baseline download (NEW)
+# GitHub baseline download / resolve (CHANGED/NEW)
 # =====================
 
 def _github_tree_to_raw(tree_url: str, filename: str) -> str:
-    """NEW: Convert a GitHub *tree* URL to a raw URL for a specific filename.
+    """Convert a GitHub *tree* URL to a raw URL for a specific filename.
     Example:
       https://github.com/<owner>/<repo>/tree/<branch>/path/to/dir
       -> https://raw.githubusercontent.com/<owner>/<repo>/<branch>/path/to/dir/<filename>
@@ -102,15 +101,23 @@ def _github_tree_to_raw(tree_url: str, filename: str) -> str:
 
 
 def download_baseline_from_github(tree_url: str, filename: str, dest_path: Path) -> Path:
-    """NEW: Download the baseline image from GitHub raw content to dest_path."""
+    """Download the baseline image from GitHub raw content to dest_path.
+    Uses Authorization header if GITHUB_TOKEN env is present (for private repos).
+    """
     dest_path = Path(dest_path)
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     raw_url = _github_tree_to_raw(tree_url, filename)
     print(f"[BASELINE] Resolving GitHub raw URL: {raw_url}")
     try:
-        with urlopen(raw_url) as resp:
-            if getattr(resp, 'status', 200) != 200:
-                raise RuntimeError(f"HTTP {resp.status} while fetching baseline from {raw_url}")
+        token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")  # NEW
+        headers = {"User-Agent": "hero-ocr-ci"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        req = Request(raw_url, headers=headers)  # CHANGED
+        with urlopen(req) as resp:
+            status = getattr(resp, 'status', 200)
+            if status != 200:
+                raise RuntimeError(f"HTTP {status} while fetching baseline from {raw_url}")
             data = resp.read()
         with open(dest_path, 'wb') as f:
             f.write(data)
@@ -119,8 +126,32 @@ def download_baseline_from_github(tree_url: str, filename: str, dest_path: Path)
     except Exception as e:
         raise RuntimeError(f"Failed to download baseline from GitHub: {e}")
 
+
+def resolve_baseline_image(*, baseline_filename: str, test_dir: Path, baseline_rel_dir: str,
+                           github_tree_dir: str, download_dest: Path) -> Path:
+    """NEW: Prefer a local file (from checkout) to avoid 404 on private repos.
+    Order: test_dir/<baseline_rel_dir>/<file> -> $GITHUB_WORKSPACE/fin-tests/PROD/<baseline_rel_dir>/<file> -> download.
+    """
+    # 1) Local alongside the tests
+    local1 = Path(test_dir) / baseline_rel_dir / baseline_filename
+    if local1.exists():
+        print(f"[BASELINE] Using local file: {local1}")
+        return local1
+
+    # 2) From the repository root (in CI the workspace is here)
+    ws = os.getenv("GITHUB_WORKSPACE")
+    if ws:
+        local2 = Path(ws) / "fin-tests" / "PROD" / baseline_rel_dir / baseline_filename
+        if local2.exists():
+            print(f"[BASELINE] Using workspace file: {local2}")
+            return local2
+
+    # 3) Fallback to raw download (public repos)
+    print("[BASELINE] Local file not found; attempting download...")
+    return download_baseline_from_github(github_tree_dir, baseline_filename, download_dest)
+
 # =====================
-# Console / JS error tracking
+# Console / JS error tracking (unchanged)
 # =====================
 
 def detect_js_errors_from_specific_files(client: str, page, specific_files: list[str], error_tracker: list[str], screenshots_directory: str | Path):
@@ -146,7 +177,7 @@ def detect_js_errors_from_specific_files(client: str, page, specific_files: list
         setattr(page, "_js_error_handler_set", True)
 
 # =====================
-# Network-quiet helpers
+# Network-quiet helpers (unchanged)
 # =====================
 
 async def wait_for_network_quiet(page, idle_ms: int = 1200, max_wait: int = 15000):
@@ -235,7 +266,7 @@ async def navigate_and_settle(page, url: str, ready_selector: str | None = None,
             pass
 
 # =====================
-# DOM helpers / visual stability
+# DOM helpers / visual stability (unchanged)
 # =====================
 
 async def wait_for_js_and_element(page, selector, timeout=45000):
@@ -251,7 +282,7 @@ async def wait_for_js_and_element(page, selector, timeout=45000):
         print(f"Timeout waiting for element: {selector}")
 
 
-async def freeze_visual_changes(page):  # NEW
+async def freeze_visual_changes(page):
     await page.add_style_tag(content="*{animation:none!important;transition:none!important}")
     await page.evaluate("""
         for (const v of document.querySelectorAll('video')) {
@@ -279,9 +310,7 @@ def _normalize_text(txt: str) -> str:
 
 
 def compare_images_ocr_and_pixels(baseline_path: str | Path, current_path: str | Path, rms_threshold: float = 3.0) -> Tuple[bool, str]:
-    """OCR-only comparison.
-    Returns (is_match, message). If Tesseract is unavailable or OCR text differs, returns False with context.
-    """
+    """OCR-only comparison. Returns (is_match, message)."""
     baseline_path = Path(baseline_path)
     current_path = Path(current_path)
     print(f"baseline_path is {baseline_path} and current_path is {current_path}")
@@ -300,8 +329,8 @@ def compare_images_ocr_and_pixels(baseline_path: str | Path, current_path: str |
     try:
         base_txt = _normalize_text(pytesseract.image_to_string(base_img))
         curr_txt = _normalize_text(pytesseract.image_to_string(curr_img))
-        print(f"[OCR-ONLY] baseline: '{base_txt}'")  # NEW
-        print(f"[OCR-ONLY] current : '{curr_txt}'")  # NEW
+        print(f"[OCR-ONLY] baseline: '{base_txt}'")
+        print(f"[OCR-ONLY] current : '{curr_txt}'")
         if base_txt and curr_txt and base_txt == curr_txt:
             return True, "OCR text matches (pixels ignored by design)."
         return False, f"OCR text differs.\nBaseline: '{base_txt}'\nCurrent : '{curr_txt}'"
@@ -314,15 +343,14 @@ def compare_images_ocr_and_pixels(baseline_path: str | Path, current_path: str |
 
 @pytest_asyncio.fixture
 async def browser(request):
-    # NEW: allow secrets to override test params in CI
     param_user = request.param.get("username") if hasattr(request, 'param') and request.param else None
     param_pass = request.param.get("password") if hasattr(request, 'param') and request.param else None
-    username = os.getenv("BASIC_AUTH_USER") or param_user or "OneAZ"  # CHANGED
-    password = os.getenv("BASIC_AUTH_PASS") or param_pass or "pugs r potatoes!3"  # CHANGED
+    username = os.getenv("BASIC_AUTH_USER") or param_user or "OneAZ"
+    password = os.getenv("BASIC_AUTH_PASS") or param_pass or "pugs r potatoes!3"
 
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(
-            headless=HEADLESS,  # NEW: headless in CI
+            headless=HEADLESS,
             args=[
                 "--hide-scrollbars",
                 "--force-device-scale-factor=1",
@@ -346,7 +374,7 @@ async def browser(request):
             await browser.close()
 
 # =====================
-# The test (with DOM assertion) + GitHub baseline
+# The test (with DOM assertion) + GitHub/local baseline resolve (CHANGED)
 # =====================
 
 @pytest.mark.asyncio
@@ -380,12 +408,18 @@ async def test_oneaz_hero_ocr_ci(
     print(f"Resolved screenshots_root: {screenshots_root}")
     print(f"Resolved current_dir: {current_dir}")
 
-    # NEW: Download the baseline image from GitHub into the current run folder
-    downloaded_baseline_path = current_dir / baseline_filename
+    # CHANGED: Prefer local baseline; fallback to download only if needed
+    downloaded_baseline_path = current_dir / baseline_filename  # destination if we must download
     try:
-        baseline_hero_path = download_baseline_from_github(baseline_github_tree_dir, baseline_filename, downloaded_baseline_path)
+        baseline_hero_path = resolve_baseline_image(
+            baseline_filename=baseline_filename,
+            test_dir=test_dir,
+            baseline_rel_dir="oneaz/baseline",  # CHANGED: relative to fin-tests/PROD
+            github_tree_dir=baseline_github_tree_dir,
+            download_dest=downloaded_baseline_path,
+        )
     except Exception as e:
-        pytest.fail(f"Failed to prepare baseline from GitHub: {e}")
+        pytest.fail(f"Failed to prepare baseline: {e}")
 
     page = await browser.new_page()
 
