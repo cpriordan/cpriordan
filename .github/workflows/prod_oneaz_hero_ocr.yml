@@ -44,7 +44,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest -q -s tests/PROD -k hero_ocr_ci --maxfail=1 --disable-warnings
+          pytest -q -s tests/fin-tests/PROD -k test_oneaz_hero_ocr_ci --maxfail=1 --disable-warnings
 
       - name: Upload screenshots (always)
         if: always()
