@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 20
 
     env:
-      # NEW: Force headless in CI
+      # Force headless in CI
       HEADLESS: "true"
       # OPTIONAL: If your site requires basic auth, store these in repo secrets
       BASIC_AUTH_USER: ${{ secrets.BASIC_AUTH_USER }}
@@ -31,7 +31,8 @@ jobs:
       - name: Install system deps (Tesseract)
         run: |
           sudo apt-get update
-          sudo apt-get install -y tesseract-ocr
+          # CHANGED: ensure English language data is present
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
 
       - name: Install Python deps
         run: |
@@ -43,15 +44,17 @@ jobs:
           python -m playwright install --with-deps chromium
 
       - name: Run tests
+        # CHANGED: correct test path (repo contains fin-tests/, not tests/fin-tests/)
         run: |
-          pytest -q -s tests/fin-tests/PROD -k test_oneaz_hero_ocr_ci --maxfail=1 --disable-warnings
+          pytest -q -s fin-tests/PROD -k test_oneaz_hero_ocr_ci --maxfail=1 --disable-warnings
 
       - name: Upload screenshots (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: screenshots
+          # CHANGED: broaden patterns so we capture outputs from fin-tests tree
           path: |
-            tests/**/screenshots_*_using_pytest/**
+            **/screenshots_*_using_pytest/**
             **/homepage_source.html
           if-no-files-found: ignore
