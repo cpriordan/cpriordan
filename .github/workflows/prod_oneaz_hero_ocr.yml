@@ -1,4 +1,5 @@
 # Hero OCR CI (no SMTP needed — uses GitHub's failure email + artifacts)
+# NOTE: Ensures Playwright browsers are installed (fixes "Executable doesn't exist" error)
 name: Hero OCR CI
 
 on:
@@ -19,8 +20,6 @@ jobs:
     env:
       HEADLESS: "true"
       PYTHONUNBUFFERED: "1"
-      BASIC_AUTH_USER: ${{ secrets.BASIC_AUTH_USER }}
-      BASIC_AUTH_PASS: ${{ secrets.BASIC_AUTH_PASS }}
 
     steps:
       - name: Checkout
@@ -43,9 +42,11 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           # Ensure required libs are present even if not pinned in requirements.txt:
           pip install pillow pytesseract pytest pytest-asyncio playwright
-          # Ensure Playwright browsers are present:
-          python -c "import importlib.util as u; print('1' if u.find_spec('playwright') else '')" | grep -q 1 && \
-            python -m playwright install --with-deps chromium || true
+
+      # CHANGED: Install Playwright browsers unconditionally to prevent launch errors
+      - name: Install Playwright browsers (CHANGED)
+        run: |
+          python -m playwright install --with-deps chromium
 
       - name: Run pytest (capture log for artifacts)
         shell: bash
