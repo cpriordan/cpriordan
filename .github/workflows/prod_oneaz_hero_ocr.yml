@@ -1,7 +1,9 @@
-# NEW: GitHub Actions workflow to run OCR-only hero test with Playwright + Tesseract
+# NEW: GitHub Actions workflow to run OCR (Optical Character Recognition) hero test with pixel by pixel comparison in the hero only using Playwright + Tesseract
 name: Hero OCR CI
 
 on:
+  schedule:
+    - cron: "0 13 * * *"   # NEW: 13:00 UTC = 5:00 AM PST (will be 6:00 AM during PDT)
   push:
     branches: ["**"]
   pull_request:
