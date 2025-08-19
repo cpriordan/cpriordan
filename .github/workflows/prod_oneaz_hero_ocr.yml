@@ -1,22 +1,25 @@
-# NEW: GitHub Actions workflow to run OCR (Optical Character Recognition) hero test with pixel by pixel comparison in the hero only using Playwright + Tesseract
+# Hero OCR CI (no SMTP needed — uses GitHub's failure email + artifacts)
 name: Hero OCR CI
 
 on:
-  schedule:
-    - cron: "0 13 * * *"   # NEW: 13:00 UTC = 5:00 AM PST (will be 6:00 AM during PDT)
   push:
     branches: ["**"]
   pull_request:
     branches: ["**"]
+  workflow_dispatch: {}  # manual run
+  # Daily run at 5 am PST (cron is UTC)
+  schedule:
+    - cron: "0 13 * * *"  # ~5 AM US Pacific during DST (adjust as needed)
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     env:
       # Force headless in CI
       HEADLESS: "true"
+      PYTHONUNBUFFERED: "1"
       # OPTIONAL: If your site requires basic auth, store these in repo secrets
       BASIC_AUTH_USER: ${{ secrets.BASIC_AUTH_USER }}
       BASIC_AUTH_PASS: ${{ secrets.BASIC_AUTH_PASS }}
@@ -28,35 +31,41 @@ jobs:
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Install system deps (Tesseract)
         run: |
           sudo apt-get update
-          # CHANGED: ensure English language data is present
           sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
 
       - name: Install Python deps
         run: |
-          python -m pip install --upgrade pip wheel
-          pip install pytest pytest-asyncio playwright pillow pytesseract
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          # If you install Playwright via pip, also ensure browsers are present:
+          python -c "import sys; import importlib.util as u; print('playwright' if u.find_spec('playwright') else '')" | grep -q playwright && \
+            python -m playwright install --with-deps chromium || true
 
-      - name: Install Playwright browsers + deps
+      - name: Run pytest (capture log for artifacts)
+        shell: bash
         run: |
-          python -m playwright install --with-deps chromium
+          mkdir -p artifacts
+          set -o pipefail
+          # Adjust the test path/selector to your suite as needed:
+          pytest -q -s fin-tests/PROD -k test_oneaz_hero_ocr_ci --maxfail=1 --disable-warnings | tee artifacts/pytest.log
 
-      - name: Run tests
-        # CHANGED: correct test path (repo contains fin-tests/, not tests/fin-tests/)
-        run: |
-          pytest -q -s fin-tests/PROD -k test_oneaz_hero_ocr_ci --maxfail=1 --disable-warnings
-
-      - name: Upload screenshots (always)
-        if: always()
+      # Upload artifacts ONLY on failure so GitHub's failure email links to them
+      - name: Upload test artifacts (screenshots + sources + logs)
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots
-          # CHANGED: broaden patterns so we capture outputs from fin-tests tree
+          name: test-failure-artifacts
+          if-no-files-found: warn
           path: |
             **/screenshots_*_using_pytest/**
+            **/*_source.html
             **/homepage_source.html
-          if-no-files-found: ignore
+            **/homepage_screenshot.png
+            **/product_page_for_ad_screenshot.png
+            **/hero_ad_only.png
+            artifacts/pytest.log
