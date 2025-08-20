@@ -1,9 +1,9 @@
 # CHANGED/NEW NOTES
-# - Pixel-first: test only fails on OCR differences when STRICT_OCR=true (env).
-# - Added robust OCR preprocessing (upscale + grayscale + autocontrast + denoise + binarize).
-# - Tesseract called with config (default: --psm 6 --oem 3 -l eng).
-# - Removed Chromium --force-device-scale-factor=1; Playwright context runs at DPR=2 for crisp text.
-# - Kept RMS pixel diff; OCR-only diffs are informational unless STRICT_OCR=true.
+# - Added true pixel-by-pixel diff alongside OCR: compare_images_ocr_and_pixels now returns
+#   (ocr_match: bool, pixels_ok: bool, details: str)
+# - Introduced _compute_pixel_diff_metrics() using PIL.ImageChops + RMS and changed-pixel %.
+# - Test now fails if OCR passes but pixels differ, and reports presence count of '.control-nav'.
+# - Clearly logs when OCR passes but pixel diffs are detected.
 
 import asyncio
 import pytest
@@ -16,17 +16,13 @@ from typing import Tuple, Optional
 from urllib.parse import urlparse  # existing
 from urllib.request import urlopen, Request  # CHANGED: Request added for headers
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
-from PIL import Image, ImageChops, ImageStat, ImageOps, ImageFilter  # CHANGED: +ImageOps, +ImageFilter
+from PIL import Image, ImageChops, ImageStat  # CHANGED: import ImageChops, ImageStat
 import pytesseract
 from pytesseract import TesseractNotFoundError
 
 # NEW: auto-headless in CI; override with HEADLESS env
 HEADLESS = (os.getenv("CI", "").lower() in {"true", "1", "yes"}) or (os.getenv("HEADLESS", "").lower() in {"true", "1", "yes"})
-# NEW: control whether OCR-only differences should fail the test
-STRICT_OCR = os.getenv("STRICT_OCR", "false").lower() in {"1", "true", "yes"}
-# NEW: allow overriding tesseract config from env
-OCR_CONFIG = os.getenv("OCR_CONFIG", "--psm 6 --oem 3 -l eng")
-print(f"[CI] HEADLESS={HEADLESS} STRICT_OCR={STRICT_OCR} OCR_CONFIG='{OCR_CONFIG}'")
+print(f"[CI] HEADLESS={HEADLESS}")
 
 # =====================
 # Tesseract configuration
@@ -134,7 +130,7 @@ def download_baseline_from_github(tree_url: str, filename: str, dest_path: Path)
 
 def resolve_baseline_image(*, baseline_filename: str, test_dir: Path, baseline_rel_dir: str,
                            github_tree_dir: str, download_dest: Path) -> Path:
-    """Prefer a local file (from checkout) to avoid 404 on private repos.
+    """NEW: Prefer a local file (from checkout) to avoid 404 on private repos.
     Order: test_dir/<baseline_rel_dir>/<file> -> $GITHUB_WORKSPACE/fin-tests/PROD/<baseline_rel_dir>/<file> -> download.
     """
     # 1) Local alongside the tests
@@ -313,21 +309,8 @@ async def align_viewport_to_baseline(page, baseline_img_path: Path, extra_height
 def _normalize_text(txt: str) -> str:
     return " ".join(txt.split()).strip().lower()
 
-# NEW: OCR preprocessing for stability
-
-def _prep_for_ocr(img: Image.Image) -> Image.Image:
-    """Upscale + clean to stabilize OCR across runners."""
-    w, h = img.size
-    img2 = img.resize((w * 2, h * 2), Image.LANCZOS)  # upscale 2x
-    img2 = img2.convert("L")
-    img2 = ImageOps.autocontrast(img2, cutoff=1)
-    img2 = img2.filter(ImageFilter.MedianFilter(size=3))
-    # simple binarization to suppress gradients
-    img2 = img2.point(lambda p: 255 if p > 180 else 0, mode="1")
-    return img2.convert("L")
 
 # NEW: compute image difference metrics (RMS + percent-changed)
-
 def _compute_pixel_diff_metrics(base_img: Image.Image, curr_img: Image.Image) -> Tuple[float, float]:
     """Returns (overall_rms, percent_changed_0_100). Images are auto-cropped to common size."""
     # Ensure same size by cropping to min common area
@@ -354,7 +337,6 @@ def _compute_pixel_diff_metrics(base_img: Image.Image, curr_img: Image.Image) ->
 
 
 # CHANGED: now returns (ocr_match, pixels_ok, message)
-
 def compare_images_ocr_and_pixels(baseline_path: str | Path, current_path: str | Path, rms_threshold: float = 3.0) -> Tuple[bool, bool, str]:
     baseline_path = Path(baseline_path)
     current_path = Path(current_path)
@@ -368,16 +350,14 @@ def compare_images_ocr_and_pixels(baseline_path: str | Path, current_path: str |
     base_img = Image.open(baseline_path).convert('RGB')
     curr_img = Image.open(current_path).convert('RGB')
 
-    # OCR branch (CHANGED: preprocessing + config)
+    # OCR branch
     if not TESSERACT_OK:
         ocr_match = False
         ocr_msg = "OCR unavailable on this machine."
     else:
         try:
-            base_ocr = _prep_for_ocr(base_img)
-            curr_ocr = _prep_for_ocr(curr_img)
-            base_txt = _normalize_text(pytesseract.image_to_string(base_ocr, config=OCR_CONFIG, lang="eng"))
-            curr_txt = _normalize_text(pytesseract.image_to_string(curr_ocr, config=OCR_CONFIG, lang="eng"))
+            base_txt = _normalize_text(pytesseract.image_to_string(base_img))
+            curr_txt = _normalize_text(pytesseract.image_to_string(curr_img))
             print(f"[OCR] baseline: '{base_txt}'")
             print(f"[OCR] current : '{curr_txt}'")
             ocr_match = bool(base_txt and curr_txt and base_txt == curr_txt)
@@ -415,7 +395,7 @@ async def browser(request):
             headless=HEADLESS,
             args=[
                 "--hide-scrollbars",
-                # "--force-device-scale-factor=1",  # REMOVED: caused blur + OCR noise
+                "--force-device-scale-factor=1",
                 "--disable-extensions",
                 "--disable-background-timer-throttling",
                 "--no-default-browser-check",
@@ -424,7 +404,7 @@ async def browser(request):
         )
         context = await browser.new_context(
             http_credentials={"username": username, "password": password},
-            device_scale_factor=2,  # CHANGED: crisper text for OCR
+            device_scale_factor=1,
             viewport={"width": 1280, "height": 900},
         )
         context.set_default_timeout(45000)
@@ -470,13 +450,13 @@ async def test_oneaz_hero_ocr_ci(
     print(f"Resolved screenshots_root: {screenshots_root}")
     print(f"Resolved current_dir: {current_dir}")
 
-    # Prefer local baseline; fallback to download only if needed
+    # CHANGED: Prefer local baseline; fallback to download only if needed
     downloaded_baseline_path = current_dir / baseline_filename  # destination if we must download
     try:
         baseline_hero_path = resolve_baseline_image(
             baseline_filename=baseline_filename,
             test_dir=test_dir,
-            baseline_rel_dir="oneaz/baseline",  # relative to fin-tests/PROD
+            baseline_rel_dir="oneaz/baseline",  # CHANGED: relative to fin-tests/PROD
             github_tree_dir=baseline_github_tree_dir,
             download_dest=downloaded_baseline_path,
         )
@@ -567,11 +547,11 @@ async def test_oneaz_hero_ocr_ci(
         await page.locator("#homeSlider").screenshot(path=str(current_hero_path))
         print("Saved hero section screenshot as hero_ad_only.png")
 
-        # OCR + PIXEL comparison
+        # OCR + PIXEL comparison (CHANGED)
         ocr_match, pixels_ok, details = compare_images_ocr_and_pixels(baseline_hero_path, current_hero_path, rms_threshold=3.0)
         print(f"[COMPARE] {details}")
 
-        # If OCR matches but pixel differences exist, include info about '.control-nav'
+        # NEW: If OCR matches but pixel differences exist, include info about '.control-nav'
         if ocr_match and not pixels_ok:
             try:
                 control_nav_count = await page.locator(".control-nav").count()
@@ -580,15 +560,13 @@ async def test_oneaz_hero_ocr_ci(
             extra = f" OCR PASSED, but pixel differences detected. '.control-nav' count={control_nav_count}."
             pytest.fail("Hero image mismatch: " + details + extra)
 
-        # Pixels must match (primary signal)
+        # Original behaviors preserved
+        if not ocr_match:
+            pytest.fail(f"Hero image mismatch (OCR): {details}")
         if not pixels_ok:
             pytest.fail(f"Hero image mismatch (Pixels): {details}")
 
-        # OCR-only differences should not fail unless STRICT_OCR is enabled
-        if STRICT_OCR and not ocr_match:
-            pytest.fail(f"Hero image mismatch (OCR): {details}")
-
-        print("Hero image comparison passed (Pixels" + (" + OCR)." if ocr_match else " | OCR differences ignored)."))
+        print("Hero image comparison passed (OCR + Pixels).")
 
         await wait_for_js_and_element(page, hero_heading_selector, timeout=45000)
         await page.wait_for_selector(hero_heading_selector, state='visible', timeout=45000)
