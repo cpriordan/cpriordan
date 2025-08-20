@@ -20,6 +20,8 @@ jobs:
     env:
       HEADLESS: "true"
       PYTHONUNBUFFERED: "1"
+      BASIC_AUTH_USER: ${{ secrets.BASIC_AUTH_USER }}
+      BASIC_AUTH_PASS: ${{ secrets.BASIC_AUTH_PASS }}
 
     steps:
       - name: Checkout
@@ -35,6 +37,31 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
+
+      - name: Install common fonts (NEW)
+        # NEW: Stabilize Chromium text rendering for consistent OCR
+        run: |
+          sudo apt-get install -y fonts-liberation fonts-dejavu-core fonts-noto-color-emoji
+
+      - name: Print OCR engine versions (NEW)
+        # NEW: Surface OCR versions + traineddata checksums to detect version drift
+        run: |
+          echo "=== Tesseract CLI version ==="
+          tesseract --version || true
+          echo "=== pytesseract detected version ==="
+          python - <<'PY'
+import pytesseract
+print("pytesseract:", pytesseract.get_tesseract_version())
+PY
+          echo "=== Installed tesseract packages ==="
+          dpkg -l | grep -E 'tesseract|leptonica' || true
+          echo "=== eng.traineddata locations & checksums ==="
+          for f in \
+            /usr/share/tesseract-ocr/tessdata/eng.traineddata \
+            /usr/share/tesseract-ocr/4.00/tessdata/eng.traineddata \
+            /usr/share/tesseract-ocr/5/tessdata/eng.traineddata; do
+            if [ -f "$f" ]; then echo "$f"; sha256sum "$f"; fi
+          done
 
       - name: Install Python deps (Pillow, Playwright, PyTest, pytesseract)
         run: |
@@ -56,6 +83,18 @@ jobs:
           mkdir -p artifacts
           set -o pipefail
           pytest -q -s fin-tests/PROD -k test_oneaz_hero_ocr_ci --maxfail=1 --disable-warnings | tee artifacts/pytest.log
+            artifacts/ocr_*.txt  # NEW
+
+      - name: Dump OCR text for baseline & current (NEW)
+        # NEW: Capture OCR outputs as artifacts to compare against logs/images
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          BASE="fin-tests/PROD/oneaz/baseline/hero_ad_only_baseline.png"
+          CURR="fin-tests/PROD/screenshots_oneaz_using_pytest/current/hero_ad_only.png"
+          if [ -f "$BASE" ]; then tesseract "$BASE" stdout -l eng --psm 6 --oem 3 > artifacts/ocr_baseline.txt || true; fi
+          if [ -f "$CURR" ]; then tesseract "$CURR" stdout -l eng --psm 6 --oem 3 > artifacts/ocr_current.txt || true; fi
 
       # Upload artifacts on every run so you still get logs if collection/import fails
       - name: Upload test artifacts (screenshots + sources + logs)
