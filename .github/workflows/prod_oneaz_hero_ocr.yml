@@ -20,8 +20,7 @@ jobs:
     env:
       HEADLESS: "true"
       PYTHONUNBUFFERED: "1"
-      BASIC_AUTH_USER: ${{ secrets.BASIC_AUTH_USER }}
-      BASIC_AUTH_PASS: ${{ secrets.BASIC_AUTH_PASS }}
+      STRICT_OCR: "false"  # NEW: ignore OCR-only differences when pixels match
 
     steps:
       - name: Checkout
@@ -42,8 +41,6 @@ jobs:
         # NEW: Stabilize Chromium text rendering for consistent OCR
         run: |
           sudo apt-get install -y fonts-liberation fonts-dejavu-core fonts-noto-color-emoji
-
-      
 
       - name: Install Python deps (Pillow, Playwright, PyTest, pytesseract)
         run: |
@@ -73,19 +70,14 @@ jobs:
         # CHANGED: Works reliably on Ubuntu 22.04. On 24.04 the libasound2 package was renamed (to libasound2t64),
         # causing the Playwright deps script to fail. Pinning the runner above fixes this.
         run: |
-          python -m playwright install --with-deps chromium
-      - name: Install Playwright browsers (CHANGED)
-        # CHANGED: Works reliably on Ubuntu 22.04. On 24.04 the libasound2 package was renamed (to libasound2t64),
-        # causing the Playwright deps script to fail. Pinning the runner above fixes this.
-        run: |
-          python -m playwright install --with-deps chromium
+          python -m playwright install --with-deps chromium  # CHANGED: deduplicated step
 
       - name: Run pytest (capture log for artifacts)
         shell: bash
         run: |
           mkdir -p artifacts
           set -o pipefail
-          pytest -q -s fin-tests/PROD -k test_oneaz_hero_ocr_ci --maxfail=1 --disable-warnings | tee artifacts/pytest.log  # CHANGED: removed stray line
+          pytest -q -s fin-tests/PROD -k test_oneaz_hero_ocr_ci --maxfail=1 --disable-warnings | tee artifacts/pytest.log
 
       - name: Dump OCR text for baseline & current (NEW)
         # NEW: Capture OCR outputs as artifacts to compare against logs/images
