@@ -82,8 +82,7 @@ PY
         run: |
           mkdir -p artifacts
           set -o pipefail
-          pytest -q -s fin-tests/PROD -k test_oneaz_hero_ocr_ci --maxfail=1 --disable-warnings | tee artifacts/pytest.log
-            artifacts/ocr_*.txt  # NEW
+          pytest -q -s fin-tests/PROD -k test_oneaz_hero_ocr_ci --maxfail=1 --disable-warnings | tee artifacts/pytest.log  # CHANGED: removed stray line
 
       - name: Dump OCR text for baseline & current (NEW)
         # NEW: Capture OCR outputs as artifacts to compare against logs/images
@@ -111,3 +110,4 @@ PY
             **/product_page_for_ad_screenshot.png
             **/hero_ad_only.png
             artifacts/pytest.log
+            artifacts/ocr_*.txt  # CHANGED: moved here (artifact upload)
