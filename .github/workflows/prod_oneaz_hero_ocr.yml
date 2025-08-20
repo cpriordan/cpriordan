@@ -14,7 +14,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # CHANGED: pin runner to 22.04 to avoid libasound2 rename issue on 24.04
     timeout-minutes: 30
 
     env:
@@ -45,6 +45,8 @@ jobs:
 
       # CHANGED: Install Playwright browsers unconditionally to prevent launch errors
       - name: Install Playwright browsers (CHANGED)
+        # CHANGED: Works reliably on Ubuntu 22.04. On 24.04 the libasound2 package was renamed (to libasound2t64),
+        # causing the Playwright deps script to fail. Pinning the runner above fixes this.
         run: |
           python -m playwright install --with-deps chromium
 
