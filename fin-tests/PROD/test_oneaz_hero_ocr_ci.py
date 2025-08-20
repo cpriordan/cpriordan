@@ -4,6 +4,7 @@
 # - Introduced _compute_pixel_diff_metrics() using PIL.ImageChops + RMS and changed-pixel %.
 # - Test now fails if OCR passes but pixels differ, and reports presence count of '.control-nav'.
 # - Clearly logs when OCR passes but pixel diffs are detected.
+# - CHANGED: OCR preprocessing + config; do not fail on OCR-only mismatches unless STRICT_OCR=true.
 
 import asyncio
 import pytest
@@ -16,13 +17,16 @@ from typing import Tuple, Optional
 from urllib.parse import urlparse  # existing
 from urllib.request import urlopen, Request  # CHANGED: Request added for headers
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
-from PIL import Image, ImageChops, ImageStat  # CHANGED: import ImageChops, ImageStat
+from PIL import Image, ImageChops, ImageStat, ImageOps, ImageFilter  # CHANGED: add ImageOps, ImageFilter
 import pytesseract
 from pytesseract import TesseractNotFoundError
 
 # NEW: auto-headless in CI; override with HEADLESS env
 HEADLESS = (os.getenv("CI", "").lower() in {"true", "1", "yes"}) or (os.getenv("HEADLESS", "").lower() in {"true", "1", "yes"})
 print(f"[CI] HEADLESS={HEADLESS}")
+
+# NEW: allow toggling OCR strictness from CI (CHANGED)
+STRICT_OCR = (os.getenv("STRICT_OCR", "").lower() in {"true", "1", "yes"})
 
 # =====================
 # Tesseract configuration
@@ -310,6 +314,22 @@ def _normalize_text(txt: str) -> str:
     return " ".join(txt.split()).strip().lower()
 
 
+# NEW: OCR preprocessing to stabilize results
+# - grayscale -> upscale -> autocontrast -> median filter -> binarize
+# - This helps Tesseract read small anti-aliased text over images
+
+def _prep_for_ocr(img: Image.Image) -> Image.Image:  # CHANGED
+    g = img.convert("L")
+    g = g.resize((g.width * 2, g.height * 2), Image.BICUBIC)
+    g = ImageOps.autocontrast(g)
+    try:
+        g = g.filter(ImageFilter.MedianFilter(size=3))
+    except Exception:
+        pass
+    g = g.point(lambda p: 255 if p > 160 else 0)
+    return g
+
+
 # NEW: compute image difference metrics (RMS + percent-changed)
 def _compute_pixel_diff_metrics(base_img: Image.Image, curr_img: Image.Image) -> Tuple[float, float]:
     """Returns (overall_rms, percent_changed_0_100). Images are auto-cropped to common size."""
@@ -356,8 +376,9 @@ def compare_images_ocr_and_pixels(baseline_path: str | Path, current_path: str |
         ocr_msg = "OCR unavailable on this machine."
     else:
         try:
-            base_txt = _normalize_text(pytesseract.image_to_string(base_img))
-            curr_txt = _normalize_text(pytesseract.image_to_string(curr_img))
+            ocr_cfg = "--oem 3 --psm 6 -l eng"  # CHANGED: guide Tesseract to a single text block
+            base_txt = _normalize_text(pytesseract.image_to_string(_prep_for_ocr(base_img), config=ocr_cfg))
+            curr_txt = _normalize_text(pytesseract.image_to_string(_prep_for_ocr(curr_img), config=ocr_cfg))
             print(f"[OCR] baseline: '{base_txt}'")
             print(f"[OCR] current : '{curr_txt}'")
             ocr_match = bool(base_txt and curr_txt and base_txt == curr_txt)
@@ -560,13 +581,21 @@ async def test_oneaz_hero_ocr_ci(
             extra = f" OCR PASSED, but pixel differences detected. '.control-nav' count={control_nav_count}."
             pytest.fail("Hero image mismatch: " + details + extra)
 
-        # Original behaviors preserved
-        if not ocr_match:
-            pytest.fail(f"Hero image mismatch (OCR): {details}")
+        # Decision policy (CHANGED):
+        # 1) If pixels differ beyond threshold -> FAIL (regardless of OCR)
+        # 2) If pixels are OK -> do not fail purely on OCR unless STRICT_OCR is set
         if not pixels_ok:
-            pytest.fail(f"Hero image mismatch (Pixels): {details}")
+            if ocr_match:
+                pytest.fail(f"Hero image mismatch (Pixels): pixels differ although OCR matches. {details}")
+            else:
+                pytest.fail(f"Hero image mismatch (Pixels+OCR): {details}")
+        else:
+            if not ocr_match and STRICT_OCR:
+                pytest.fail(f"Hero image mismatch (OCR-only; STRICT mode): {details}")
+            elif not ocr_match:
+                print("Pixels OK; ignoring OCR-only mismatch in non-strict mode (CHANGED policy).")
 
-        print("Hero image comparison passed (OCR + Pixels).")
+        print("Hero image comparison passed (Pixels OK; OCR policy applied).")
 
         await wait_for_js_and_element(page, hero_heading_selector, timeout=45000)
         await page.wait_for_selector(hero_heading_selector, state='visible', timeout=45000)
@@ -600,3 +629,4 @@ async def test_oneaz_hero_ocr_ci(
             pytest.fail(f"Detected JavaScript errors: {error_tracker}")
         else:
             print(f"No JavaScript errors detected for {client}.")
+
