@@ -49,10 +49,7 @@ jobs:
           echo "=== Tesseract CLI version ==="
           tesseract --version || true
           echo "=== pytesseract detected version ==="
-          python - <<'PY'
-import pytesseract
-print("pytesseract:", pytesseract.get_tesseract_version())
-PY
+          python -c "import pytesseract; print('pytesseract:', pytesseract.get_tesseract_version())"  # CHANGED: replaced heredoc with python -c to avoid YAML multiline key parsing error
           echo "=== Installed tesseract packages ==="
           dpkg -l | grep -E 'tesseract|leptonica' || true
           echo "=== eng.traineddata locations & checksums ==="
