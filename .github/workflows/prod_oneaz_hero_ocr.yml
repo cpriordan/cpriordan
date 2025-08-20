@@ -20,7 +20,9 @@ jobs:
     env:
       HEADLESS: "true"
       PYTHONUNBUFFERED: "1"
-      STRICT_OCR: "false"  # NEW: ignore OCR-only differences when pixels match
+      STRICT_OCR: "false"  # CHANGED: only fail on OCR mismatch when set true
+      BASIC_AUTH_USER: ${{ secrets.BASIC_AUTH_USER }}
+      BASIC_AUTH_PASS: ${{ secrets.BASIC_AUTH_PASS }}
 
     steps:
       - name: Checkout
@@ -38,7 +40,7 @@ jobs:
           sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
 
       - name: Install common fonts (NEW)
-        # NEW: Stabilize Chromium text rendering for consistent OCR
+        # CHANGED: Stabilize Chromium text rendering for consistent OCR
         run: |
           sudo apt-get install -y fonts-liberation fonts-dejavu-core fonts-noto-color-emoji
 
@@ -49,8 +51,8 @@ jobs:
           # Ensure required libs are present even if not pinned in requirements.txt:
           pip install pillow pytesseract pytest pytest-asyncio playwright
 
-      - name: Print OCR engine versions (NEW)  # CHANGED: MOVED after Python deps so pytesseract is importable
-        # Surface OCR versions + traineddata checksums to detect version drift
+      - name: Print OCR engine versions (NEW)
+        # CHANGED: moved after Python deps so pytesseract is importable
         run: |
           echo "=== Tesseract CLI version ==="
           tesseract --version || true
@@ -70,7 +72,7 @@ jobs:
         # CHANGED: Works reliably on Ubuntu 22.04. On 24.04 the libasound2 package was renamed (to libasound2t64),
         # causing the Playwright deps script to fail. Pinning the runner above fixes this.
         run: |
-          python -m playwright install --with-deps chromium  # CHANGED: deduplicated step
+          python -m playwright install --with-deps chromium
 
       - name: Run pytest (capture log for artifacts)
         shell: bash
@@ -105,4 +107,4 @@ jobs:
             **/product_page_for_ad_screenshot.png
             **/hero_ad_only.png
             artifacts/pytest.log
-            artifacts/ocr_*.txt  # CHANGED: moved here (artifact upload)
+            artifacts/ocr_*.txt
