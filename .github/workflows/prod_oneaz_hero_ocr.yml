@@ -1,5 +1,4 @@
-# Hero OCR CI (no SMTP needed — uses GitHub's failure email + artifacts)
-# NOTE: Ensures Playwright browsers are installed (fixes "Executable doesn't exist" error)
+# NEW: GitHub Actions workflow to run OCR-only hero test with Playwright + Tesseract
 name: Hero OCR CI
 
 on:
@@ -7,20 +6,16 @@ on:
     branches: ["**"]
   pull_request:
     branches: ["**"]
-  workflow_dispatch: {}  # manual run
-  # Daily run at 5 am PST (cron is UTC)
-  schedule:
-    - cron: "0 13 * * *"  # ~5 AM US Pacific during DST (adjust as needed)
 
 jobs:
   test:
-    runs-on: ubuntu-22.04  # CHANGED: pin runner to 22.04 to avoid libasound2 rename issue on 24.04
-    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     env:
+      # Force headless in CI
       HEADLESS: "true"
-      PYTHONUNBUFFERED: "1"
-      STRICT_OCR: "false"  # CHANGED: only fail on OCR mismatch when set true
+      # OPTIONAL: If your site requires basic auth, store these in repo secrets
       BASIC_AUTH_USER: ${{ secrets.BASIC_AUTH_USER }}
       BASIC_AUTH_PASS: ${{ secrets.BASIC_AUTH_PASS }}
 
@@ -31,80 +26,35 @@ jobs:
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: "pip"
+          python-version: '3.12'
 
       - name: Install system deps (Tesseract)
         run: |
           sudo apt-get update
+          # CHANGED: ensure English language data is present
           sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
 
-      - name: Install common fonts (NEW)
-        # CHANGED: Stabilize Chromium text rendering for consistent OCR
+      - name: Install Python deps
         run: |
-          sudo apt-get install -y fonts-liberation fonts-dejavu-core fonts-noto-color-emoji
+          python -m pip install --upgrade pip wheel
+          pip install pytest pytest-asyncio playwright pillow pytesseract
 
-      - name: Install Python deps (Pillow, Playwright, PyTest, pytesseract)
-        run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          # Ensure required libs are present even if not pinned in requirements.txt:
-          pip install pillow pytesseract pytest pytest-asyncio playwright
-
-      - name: Print OCR engine versions (NEW)
-        # CHANGED: moved after Python deps so pytesseract is importable
-        run: |
-          echo "=== Tesseract CLI version ==="
-          tesseract --version || true
-          echo "=== pytesseract detected version ==="
-          python -c "import pytesseract; print('pytesseract:', pytesseract.get_tesseract_version())"
-          echo "=== Installed tesseract packages ==="
-          dpkg -l | grep -E 'tesseract|leptonica' || true
-          echo "=== eng.traineddata locations & checksums ==="
-          for f in \
-            /usr/share/tesseract-ocr/tessdata/eng.traineddata \
-            /usr/share/tesseract-ocr/4.00/tessdata/eng.traineddata \
-            /usr/share/tesseract-ocr/5/tessdata/eng.traineddata; do
-            if [ -f "$f" ]; then echo "$f"; sha256sum "$f"; fi
-          done
-
-      - name: Install Playwright browsers (CHANGED)
-        # CHANGED: Works reliably on Ubuntu 22.04. On 24.04 the libasound2 package was renamed (to libasound2t64),
-        # causing the Playwright deps script to fail. Pinning the runner above fixes this.
+      - name: Install Playwright browsers + deps
         run: |
           python -m playwright install --with-deps chromium
 
-      - name: Run pytest (capture log for artifacts)
-        shell: bash
+      - name: Run tests
+        # CHANGED: correct test path (repo contains fin-tests/, not tests/fin-tests/)
         run: |
-          mkdir -p artifacts
-          set -o pipefail
-          pytest -q -s fin-tests/PROD -k test_oneaz_hero_ocr_ci --maxfail=1 --disable-warnings | tee artifacts/pytest.log
+          pytest -q -s fin-tests/PROD -k test_oneaz_hero_ocr_ci --maxfail=1 --disable-warnings
 
-      - name: Dump OCR text for baseline & current (NEW)
-        # NEW: Capture OCR outputs as artifacts to compare against logs/images
-        if: always()
-        shell: bash
-        run: |
-          mkdir -p artifacts
-          BASE="fin-tests/PROD/oneaz/baseline/hero_ad_only_baseline.png"
-          CURR="fin-tests/PROD/screenshots_oneaz_using_pytest/current/hero_ad_only.png"
-          if [ -f "$BASE" ]; then tesseract "$BASE" stdout -l eng --psm 6 --oem 3 > artifacts/ocr_baseline.txt || true; fi
-          if [ -f "$CURR" ]; then tesseract "$CURR" stdout -l eng --psm 6 --oem 3 > artifacts/ocr_current.txt || true; fi
-
-      # Upload artifacts on every run so you still get logs if collection/import fails
-      - name: Upload test artifacts (screenshots + sources + logs)
+      - name: Upload screenshots (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-failure-artifacts
-          if-no-files-found: warn
+          name: screenshots
+          # CHANGED: broaden patterns so we capture outputs from fin-tests tree
           path: |
             **/screenshots_*_using_pytest/**
-            **/*_source.html
             **/homepage_source.html
-            **/homepage_screenshot.png
-            **/product_page_for_ad_screenshot.png
-            **/hero_ad_only.png
-            artifacts/pytest.log
-            artifacts/ocr_*.txt
+          if-no-files-found: ignore
