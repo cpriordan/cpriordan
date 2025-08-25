@@ -1,5 +1,4 @@
 # === QA test_oneaz_hero_ocr_ci.py (UPDATED again to eliminate remaining #homeSlider timeouts)
-# All changes since your last version are marked ⟵ CHANGED.
 
 import asyncio
 import pytest
@@ -31,8 +30,8 @@ def _configure_tesseract() -> bool:
     except Exception:
         pass
     possible_paths = [
-        r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
-        r"C:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe",
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
     ]
     for exe in possible_paths:
         if os.path.exists(exe):
@@ -369,7 +368,9 @@ def compare_images_ocr_and_pixels(
             print(f"[OCR] current : '{curr_txt}'")
             ocr_match = bool(base_txt and curr_txt and base_txt == curr_txt)
             ocr_msg = "OCR text matches." if ocr_match else (
-                f"OCR text differs.\nBaseline: '{base_txt}'\nCurrent : '{curr_txt}'"
+                f"OCR text differs.
+Baseline: '{base_txt}'
+Current : '{curr_txt}'"
             )
         except (TesseractNotFoundError, FileNotFoundError) as e:
             ocr_match = False
@@ -541,24 +542,24 @@ async def test_oneaz_hero_ocr_ci(
         except PlaywrightTimeoutError:
             print("wait_for_function: hero not found by selector set; will try heading fallback.")
 
-        # 2) Try to resolve the hero element via multiple paths (selector set, then heading -> container)  ⟵ CHANGED
+        # 2) Resolve hero via selector set, else via heading container   FIXED
         hero_selector_js = "'#homeSlider, .hero-row#homeSlider, .hero-row'"
-        bbox = await page.evaluate(f"""
-            (sel) => {{
+        bbox = await page.evaluate("""
+            (sel) => {
               let el = document.querySelector(sel);
-              if (!el) {{
+              if (!el) {
                 const h1 = document.querySelector('#copyCol h1, #homeSlider h1');
                 if (h1) el = h1.closest('#homeSlider, .hero-row') || h1.parentElement;
-              }}
+              }
               if (!el) return null;
               el.style.visibility='visible'; el.style.opacity='1';
-              el.scrollIntoView({block:'start'});
+              el.scrollIntoView({ block: 'start' });  // FIXED: JS object literal; no Python f-string
               const r = el.getBoundingClientRect();
-              return {{x:r.x, y:r.y, width:Math.max(1,r.width), height:Math.max(1,r.height)}};
-            }}
+              return {x:r.x, y:r.y, width:Math.max(1,r.width), height:Math.max(1,r.height)};
+            }
         """, hero_selector_js)
 
-        # 3) If still missing, last-resort: clip top-of-page region sized like baseline  ⟵ CHANGED
+        # 3) If still missing, last-resort: clip top-of-page region sized like baseline
         if not bbox:
             print("Hero bbox not resolved; using baseline-sized fallback clip at top of page.")
             try:
@@ -570,9 +571,8 @@ async def test_oneaz_hero_ocr_ci(
         print(f"DEBUG hero bbox (w x h): {bbox['width']} x {bbox['height']}")
 
         current_hero_path = current_dir / 'hero_ad_only.png'
-        # Prefer element screenshot if resolvable; otherwise use page clip  ⟵ CHANGED
+        # Prefer element screenshot if resolvable; otherwise use page clip
         try:
-            # Try to screenshot the most specific element we can get
             hero_locator = page.locator("#homeSlider, .hero-row#homeSlider, .hero-row").first
             if await hero_locator.count() > 0:
                 await hero_locator.screenshot(path=str(current_hero_path))
