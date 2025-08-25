@@ -1,5 +1,5 @@
-# NEW: GitHub Actions workflow to run OCR-only hero test with Playwright + Tesseract
-name: Hero OCR CI
+# NEW: GitHub Actions workflow to run OneAZ BusinessAd OCR-only hero test with Playwright + Tesseract
+name: OneAZ Business Ad Hero test using OCR
 
 on:
   schedule:
