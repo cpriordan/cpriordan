@@ -46,7 +46,7 @@ jobs:
         run: |
           mkdir -p artifacts
           set -o pipefail
-          pytest -q -s fin-tests/PROD -k test_oneaz_hero_ocr_ci --maxfail=1 --disable-warnings | tee artifacts/pytest.log
+          pytest -q -s fin-tests/PROD -k test_oneaz_hero_ocr_ci_stable_bg_fix --maxfail=1 --disable-warnings | tee artifacts/pytest.log
 
       - name: Dump OCR text for baseline & current (optional)  # Produce OCR text files for artifacts
         if: always()
