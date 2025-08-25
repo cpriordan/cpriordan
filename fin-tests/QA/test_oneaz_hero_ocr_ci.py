@@ -1,4 +1,5 @@
-# === QA test_oneaz_hero_ocr_ci.py (UPDATED again to eliminate remaining #homeSlider timeouts)
+# === QA test_oneaz_hero_ocr_ci.py (UPDATED to fix JS f-string NameError and Python SyntaxError)
+# All edits since your last version are marked with  ⟵ FIXED  or  ⟵ CHANGED .
 
 import asyncio
 import pytest
@@ -30,8 +31,8 @@ def _configure_tesseract() -> bool:
     except Exception:
         pass
     possible_paths = [
-        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
+        r"C:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe",
     ]
     for exe in possible_paths:
         if os.path.exists(exe):
@@ -216,7 +217,7 @@ async def navigate_and_settle(
                 try:
                     await page.wait_for_selector(ready_selector, state="attached", timeout=min(10000, nav_timeout))
                     await page.evaluate(
-                        "sel => { const el=document.querySelector(sel); if(el){ el.scrollIntoView({block:'start'}); el.style.visibility='visible'; el.style.opacity='1'; } }",
+                        "sel => { const el=document.querySelector(sel); if(el){ el.scrollIntoView({ block: 'start' }); el.style.visibility='visible'; el.style.opacity='1'; } }",  # ⟵ FIXED (spaces/quotes)
                         ready_selector,
                     )
                     try:
@@ -367,10 +368,10 @@ def compare_images_ocr_and_pixels(
             print(f"[OCR] baseline: '{base_txt}'")
             print(f"[OCR] current : '{curr_txt}'")
             ocr_match = bool(base_txt and curr_txt and base_txt == curr_txt)
-            ocr_msg = "OCR text matches." if ocr_match else (
-                f"OCR text differs.
-Baseline: '{base_txt}'
-Current : '{curr_txt}'"
+            # ⟵ FIXED: use a proper triple-quoted f-string instead of an invalid multi-line f-string
+            ocr_msg = (
+                "OCR text matches." if ocr_match else
+                f"""OCR text differs.\nBaseline: '{base_txt}'\nCurrent : '{curr_txt}'"""
             )
         except (TesseractNotFoundError, FileNotFoundError) as e:
             ocr_match = False
@@ -531,7 +532,6 @@ async def test_oneaz_hero_ocr_ci(
         await align_viewport_to_baseline(page, baseline_hero_path)
         await page.evaluate("window.scrollTo(0,0)")
 
-        # === KEY CHANGE: stop using Locator.wait_for entirely for the hero  ⟵ CHANGED ===
         # 1) Poll for presence via JS (works even if Playwright thinks it's not visible/attached yet)
         try:
             await page.wait_for_function(
@@ -542,8 +542,8 @@ async def test_oneaz_hero_ocr_ci(
         except PlaywrightTimeoutError:
             print("wait_for_function: hero not found by selector set; will try heading fallback.")
 
-        # 2) Resolve hero via selector set, else via heading container   FIXED
-        hero_selector_js = "'#homeSlider, .hero-row#homeSlider, .hero-row'"
+        # 2) Resolve hero via selector set, else via heading container
+        hero_selector_js = "#homeSlider, .hero-row#homeSlider, .hero-row"  # FIXED (remove extra quotes)
         bbox = await page.evaluate("""
             (sel) => {
               let el = document.querySelector(sel);
@@ -553,7 +553,7 @@ async def test_oneaz_hero_ocr_ci(
               }
               if (!el) return null;
               el.style.visibility='visible'; el.style.opacity='1';
-              el.scrollIntoView({ block: 'start' });  // FIXED: JS object literal; no Python f-string
+              el.scrollIntoView({ block: 'start' });  // ⟵ FIXED: JS object literal; not interpolated by Python
               const r = el.getBoundingClientRect();
               return {x:r.x, y:r.y, width:Math.max(1,r.width), height:Math.max(1,r.height)};
             }
