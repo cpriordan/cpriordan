@@ -54,8 +54,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts
-          BASE="fin-tests/PROD/oneaz/baseline/hero_ad_only_baseline.png"
-          CURR="fin-tests/PROD/screenshots_oneaz_using_pytest/current/hero_ad_only.png"
+          BASE="fin-tests/QA/oneaz/baseline/hero_ad_only_baseline.png"
+          CURR="fin-tests/QA/screenshots_oneaz_using_pytest/current/hero_ad_only.png"
           if [ -f "$BASE" ]; then tesseract "$BASE" stdout -l eng --psm 6 --oem 3 > artifacts/ocr_baseline.txt || true; fi
           if [ -f "$CURR" ]; then tesseract "$CURR" stdout -l eng --psm 6 --oem 3 > artifacts/ocr_current.txt || true; fi
 
