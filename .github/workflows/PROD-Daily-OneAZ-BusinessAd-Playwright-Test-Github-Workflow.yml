@@ -1,4 +1,4 @@
-name: Daily OneAZ Playwright Test
+name: PROD Daily OneAZ Business Ad Playwright Test
 
 on:
   schedule:
