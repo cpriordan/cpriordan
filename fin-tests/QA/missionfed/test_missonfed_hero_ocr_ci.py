@@ -1,4 +1,4 @@
-# QA version of test_missionfed_hero_ocr_ci which includes stability fixes for background change and QA URL changes
+# QA version of test_missionfed_hero_ocr_ci with fixes for missing #homeSlider (use #main .hero)
 
 import asyncio
 import pytest
@@ -8,10 +8,10 @@ import os
 import shutil
 from pathlib import Path
 from typing import Tuple, Optional
-from urllib.parse import urlparse  # existing
-from urllib.request import urlopen, Request  # CHANGED: Request added for headers
+from urllib.parse import urlparse
+from urllib.request import urlopen, Request
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
-from PIL import Image, ImageChops, ImageStat, ImageFilter  # CHANGED: +ImageFilter for blur
+from PIL import Image, ImageChops, ImageStat, ImageFilter
 import pytesseract
 from pytesseract import TesseractNotFoundError
 
@@ -80,11 +80,6 @@ async def save_page_source(page, filepath: str | Path):
 # =====================
 
 def _github_tree_to_raw(tree_url: str, filename: str) -> str:
-    """Convert a GitHub *tree* URL to a raw URL for a specific filename.
-    Example:
-      https://github.com/<owner>/<repo>/tree/<branch>/path/to/dir
-      -> https://raw.githubusercontent.com/<owner>/<repo>/<branch>/path/to/dir/<filename>
-    """
     parsed = urlparse(tree_url)
     parts = [p for p in parsed.path.strip('/').split('/') if p]
     if len(parts) < 4 or parts[2] != 'tree':
@@ -97,9 +92,6 @@ def _github_tree_to_raw(tree_url: str, filename: str) -> str:
 
 
 def download_baseline_from_github(tree_url: str, filename: str, dest_path: Path) -> Path:
-    """Download the baseline image from GitHub raw content to dest_path.
-    Uses Authorization header if GITHUB_TOKEN env is present (for private repos).
-    """
     dest_path = Path(dest_path)
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     raw_url = _github_tree_to_raw(tree_url, filename)
@@ -109,7 +101,7 @@ def download_baseline_from_github(tree_url: str, filename: str, dest_path: Path)
         headers = {"User-Agent": "hero-ocr-ci"}
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        req = Request(raw_url, headers=headers)  # ⟵ CHANGED
+        req = Request(raw_url, headers=headers)
         with urlopen(req) as resp:
             status = getattr(resp, 'status', 200)
             if status != 200:
@@ -125,16 +117,11 @@ def download_baseline_from_github(tree_url: str, filename: str, dest_path: Path)
 
 def resolve_baseline_image(*, baseline_filename: str, test_dir: Path, baseline_rel_dir: str,
                            github_tree_dir: str, download_dest: Path) -> Path:
-    """Prefer a local file (from checkout) to avoid 404 on private repos.
-    Order: test_dir/<baseline_rel_dir>/<file> -> $GITHUB_WORKSPACE/fin-tests/PROD/<baseline_rel_dir>/<file> -> download.
-    """
-    # 1) Local alongside the tests
     local1 = Path(test_dir) / baseline_rel_dir / baseline_filename
     if local1.exists():
         print(f"[BASELINE] Using local file: {local1}")
         return local1
 
-    # 2) From the repository root (in CI the workspace is here)
     ws = os.getenv("GITHUB_WORKSPACE")
     if ws:
         local2 = Path(ws) / "fin-tests" / "QA" / baseline_rel_dir / baseline_filename
@@ -142,38 +129,11 @@ def resolve_baseline_image(*, baseline_filename: str, test_dir: Path, baseline_r
             print(f"[BASELINE] Using workspace file: {local2}")
             return local2
 
-    # 3) Fallback to raw download (public repos)
     print("[BASELINE] Local file not found; attempting download...")
     return download_baseline_from_github(github_tree_dir, baseline_filename, download_dest)
 
 # =====================
-# Console / JS error tracking (unchanged)
-# =====================
-
-def detect_js_errors_from_specific_files(client: str, page, specific_files: list[str], error_tracker: list[str], screenshots_directory: str | Path):
-    screenshots_directory = Path(screenshots_directory)
-
-    async def handle_console_message(msg):
-        try:
-            location = msg.location
-            file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
-            screenshots_directory.mkdir(parents=True, exist_ok=True)
-            if msg.type == 'error' and file_name.endswith('.js') and file_name in specific_files:
-                error_message = f"JS Error found in {file_name}: {msg.text} for client {client}"
-                print(error_message)
-                error_tracker.append(error_message)
-                screenshot_path = screenshots_directory / f"js_error_{client}.png"
-                await page.screenshot(path=str(screenshot_path))
-                print(f"Screenshot of JS error saved at {screenshot_path} for client {client}")
-        except Exception as e:
-            print(f"Console handler failed: {e}")
-
-    if not getattr(page, "_js_error_handler_set", False):
-        page.on('console', lambda msg: asyncio.create_task(handle_console_message(msg)))
-        setattr(page, "_js_error_handler_set", True)
-
-# =====================
-# Network-quiet helpers (unchanged)
+# Network-quiet helpers
 # =====================
 
 async def wait_for_network_quiet(page, idle_ms: int = 1200, max_wait: int = 15000):
@@ -243,9 +203,9 @@ async def navigate_and_settle(page, url: str, ready_selector: str | None = None,
                 print(f"navigate_and_settle: '{ready_selector}' is visible.")
             except PlaywrightTimeoutError:
                 print(f"navigate_and_settle: '{ready_selector}' not visible before quiet; continuing.")
-        start = loop.time()
+        start = asyncio.get_event_loop().time()
         while True:
-            now = loop.time()
+            now = asyncio.get_event_loop().time()
             if in_flight["count"] <= 0 and (now - last_change["t"]) * 1000 >= idle_ms:
                 print("navigate_and_settle: network quiet.")
                 return
@@ -279,12 +239,13 @@ async def wait_for_js_and_element(page, selector, timeout=45000):
 
 
 async def freeze_visual_changes(page):
-    # Stronger neutralization: stop animations + mask volatile hero backgrounds  ⟵ CHANGED
+    # Support both legacy #homeSlider and MissionFed's .hero under #main  ⟵ FIXED
     await page.add_style_tag(content="""
       * { transition: none !important; animation: none !important; }
-      #homeSlider .slick-track { transform: none !important; }
-      #homeSlider .slick-slide { opacity: 1 !important; }
-      #homeSlider video, #homeSlider .bg, #homeSlider picture img, #homeSlider .slide img {
+      #homeSlider .slick-track, #main .hero .slick-track { transform: none !important; }
+      #homeSlider .slick-slide,  #main .hero .slick-slide  { opacity: 1 !important; }
+      #homeSlider video, #homeSlider .bg, #homeSlider picture img, #homeSlider .slide img,
+      #main .hero video, #main .hero .bg, #main .hero picture img, #main .hero .slide img {
         opacity: 0 !important; /* keep copy visible, hide background */
       }
     """)
@@ -313,18 +274,14 @@ def _normalize_text(txt: str) -> str:
     return " ".join(txt.split()).strip().lower()
 
 
-def _apply_preprocess(img: Image.Image, blur_radius: int = 0) -> Image.Image:  # ⟵ CHANGED
-    """Convert to RGB and optionally apply a small Gaussian blur to dampen photo noise."""
+def _apply_preprocess(img: Image.Image, blur_radius: int = 0) -> Image.Image:
     out = img.convert('RGB')
     if blur_radius > 0:
         out = out.filter(ImageFilter.GaussianBlur(blur_radius))
     return out
 
 
-# NEW: compute image difference metrics (RMS + percent-changed)
 def _compute_pixel_diff_metrics(base_img: Image.Image, curr_img: Image.Image) -> Tuple[float, float]:
-    """Returns (overall_rms, percent_changed_0_100). Images are auto-cropped to common size."""
-    # Ensure same size by cropping to min common area
     w = min(base_img.width, curr_img.width)
     h = min(base_img.height, curr_img.height)
     if base_img.size != (w, h):
@@ -334,25 +291,22 @@ def _compute_pixel_diff_metrics(base_img: Image.Image, curr_img: Image.Image) ->
 
     diff = ImageChops.difference(base_img, curr_img)
     stat = ImageStat.Stat(diff)
-    # stat.rms gives per-channel RMS; take mean across channels as "overall RMS"
     overall_rms = sum(stat.rms) / len(stat.rms)
 
-    # Approximate percent of pixels with any change
     g = diff.convert("L")
     hist = g.histogram()
     total = sum(hist)
-    changed = total - hist[0]  # non-zero entries
+    changed = total - hist[0]
     percent_changed = (changed / total * 100.0) if total else 0.0
     return overall_rms, percent_changed
 
 
-# Returns (ocr_match, pixels_ok, message)
 def compare_images_ocr_and_pixels(
     baseline_path: str | Path,
     current_path: str | Path,
     rms_threshold: float = 3.0,
-    change_threshold: float = 2.0,   # percent threshold (0–100)  ⟵ CHANGED
-    blur_radius: int = 0,            # pixels  ⟵ CHANGED
+    change_threshold: float = 2.0,
+    blur_radius: int = 0,
 ) -> Tuple[bool, bool, str]:
     baseline_path = Path(baseline_path)
     current_path = Path(current_path)
@@ -363,13 +317,11 @@ def compare_images_ocr_and_pixels(
     if not current_path.exists():
         return False, False, f"Current image not found: {current_path}"
 
-    # Preprocess (RGB + optional blur)  ⟵ CHANGED
     base_img_raw = Image.open(baseline_path)
     curr_img_raw = Image.open(current_path)
     base_img = _apply_preprocess(base_img_raw, blur_radius)
     curr_img = _apply_preprocess(curr_img_raw, blur_radius)
 
-    # OCR branch
     if not TESSERACT_OK:
         ocr_match = False
         ocr_msg = "OCR unavailable on this machine."
@@ -380,22 +332,21 @@ def compare_images_ocr_and_pixels(
             print(f"[OCR] baseline: '{base_txt}'")
             print(f"[OCR] current : '{curr_txt}'")
             ocr_match = bool(base_txt and curr_txt and base_txt == curr_txt)
-            ocr_msg = "OCR text matches." if ocr_match else (
-                f"OCR text differs.\nBaseline: '{base_txt}'\nCurrent : '{curr_txt}'"
+            ocr_msg = (
+                "OCR text matches." if ocr_match else
+                f"""OCR text differs.\nBaseline: '{base_txt}'\nCurrent : '{curr_txt}'"""
             )
         except (TesseractNotFoundError, FileNotFoundError) as e:
             ocr_match = False
             ocr_msg = f"OCR failed: {e}"
 
-    # Pixel diff branch
     overall_rms, pct_changed = _compute_pixel_diff_metrics(base_img, curr_img)
-    pixels_ok = (overall_rms <= rms_threshold) and (pct_changed <= change_threshold)  # ⟵ CHANGED
+    pixels_ok = (overall_rms <= rms_threshold) and (pct_changed <= change_threshold)
     px_msg = (
         f"Pixel diff RMS={overall_rms:.2f} (≤ {rms_threshold}) and changed={pct_changed:.2f}% (≤ {change_threshold:.0f}%) → "
         f"{'OK' if pixels_ok else 'DIFF'}"
-    )  # ⟵ CHANGED
+    )
 
-    # Combined message
     details = f"{ocr_msg} {px_msg}"
     return ocr_match, pixels_ok, details
 
@@ -436,7 +387,7 @@ async def browser(request):
             await browser.close()
 
 # =====================
-# The test (with DOM assertion) + GitHub/local baseline resolve
+# The test (with DOM assertion) + baseline resolve
 # =====================
 
 @pytest.mark.asyncio
@@ -470,8 +421,7 @@ async def test_missionfed_hero_ocr_ci(
     print(f"Resolved screenshots_root: {screenshots_root}")
     print(f"Resolved current_dir: {current_dir}")
 
-    # Prefer local baseline; fallback to download only if needed
-    downloaded_baseline_path = current_dir / baseline_filename  # destination if we must download
+    downloaded_baseline_path = current_dir / baseline_filename
     try:
         baseline_hero_path = resolve_baseline_image(
             baseline_filename=baseline_filename,
@@ -495,6 +445,27 @@ async def test_missionfed_hero_ocr_ci(
         'settings.js?code=missionfed:80',
     ]
     error_tracker = []
+    
+    def detect_js_errors_from_specific_files(client: str, page, specific_files: list[str], error_tracker: list[str], screenshots_directory: str | Path):
+        screenshots_directory = Path(screenshots_directory)
+        async def handle_console_message(msg):
+            try:
+                location = msg.location
+                file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
+                screenshots_directory.mkdir(parents=True, exist_ok=True)
+                if msg.type == 'error' and file_name.endswith('.js') and file_name in specific_files:
+                    error_message = f"JS Error found in {file_name}: {msg.text} for client {client}"
+                    print(error_message)
+                    error_tracker.append(error_message)
+                    screenshot_path = screenshots_directory / f"js_error_{client}.png"
+                    await page.screenshot(path=str(screenshot_path))
+                    print(f"Screenshot of JS error saved at {screenshot_path} for client {client}")
+            except Exception as e:
+                print(f"Console handler failed: {e}")
+        if not getattr(page, "_js_error_handler_set", False):
+            page.on('console', lambda msg: asyncio.create_task(handle_console_message(msg)))
+            setattr(page, "_js_error_handler_set", True)
+
     detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker, current_dir)
 
     print(f"About to go to home_url {homepage_url}")
@@ -538,7 +509,7 @@ async def test_missionfed_hero_ocr_ci(
         )
 
         # Freeze motion and align viewport BEFORE capture
-        await freeze_visual_changes(page)  # stronger neutralization of bg layers  ⟵ CHANGED
+        await freeze_visual_changes(page)
         await align_viewport_to_baseline(page, baseline_hero_path)
         await page.evaluate("window.scrollTo(0,0)")
 
@@ -547,7 +518,8 @@ async def test_missionfed_hero_ocr_ci(
             print("[HERO-CLEAN] No unexpected selector list provided; skipping hero DOM check.")
         else:
             for sel in unexpected_in_hero_selectors:
-                scoped = f"#homeSlider {sel}" if not sel.strip().startswith("#homeSlider") else sel
+                # Use MissionFed container instead of #homeSlider  ⟵ FIXED
+                scoped = f"#main .hero {sel}" if not sel.strip().startswith("#main .hero") else sel  # ⟵ FIXED
                 cnt = await page.locator(scoped).count()
                 if cnt > 0:
                     try:
@@ -555,38 +527,62 @@ async def test_missionfed_hero_ocr_ci(
                         snippet = await first.evaluate("(el)=>el.outerHTML.slice(0,300)")
                     except Exception as e:
                         snippet = f"<unable to capture snippet: {e}>"
-                    print(f"[UNEXPECTED-HERO] Found {cnt} element(s) matching '{sel}' inside #main. Sample: {snippet}")
+                    print(f"[UNEXPECTED-HERO] Found {cnt} element(s) matching '{sel}' inside #main .hero. Sample: {snippet}")
                     pytest.fail(f"Unexpected element in hero: selector '{sel}' matched {cnt} element(s).")
                 else:
-                    print(f"[HERO-CLEAN] No matches for '{sel}' inside #main.")
+                    print(f"[HERO-CLEAN] No matches for '{sel}' inside #main .hero.")
 
-        bbox = await page.locator("#homeSlider").bounding_box()
+        # Use a resilient hero selector that supports both layouts  NEW
+        hero_selector = "#homeSlider, #main .hero"  # FIXED (added #main .hero)
+        hero_loc = page.locator(hero_selector).first
+
+        # Wait a bit for the hero to attach/become visible, but don't hard-timeout later  NEW
+        await hero_loc.wait_for(state="attached", timeout=10000)  # NEW
+        try:
+            await hero_loc.wait_for(state="visible", timeout=5000)  #  NEW
+        except PlaywrightTimeoutError:
+            print("[HERO] Attached but not visible; proceeding with clip capture.")
+
+        # If we still can't resolve bbox, fall back to baseline-sized clip  NEW
+        bbox = await hero_loc.bounding_box()
+        if not bbox:
+            print("Hero bbox not resolved; using baseline-sized fallback clip at top of page.")
+            try:
+                bw, bh = Image.open(baseline_hero_path).size
+            except Exception:
+                bw, bh = (1280, 540)
+            bbox = {"x": 0, "y": 0, "width": bw, "height": max(1, bh)}
         print(f"DEBUG hero locator bbox (w x h): {bbox['width']} x {bbox['height']}")
 
         current_hero_path = current_dir / 'hero_ad_only.png'
-        await page.locator("#homeSlider").screenshot(path=str(current_hero_path))
+        # Prefer element screenshot if possible, else page clip  NEW
+        try:
+            if await hero_loc.count() > 0:
+                await hero_loc.screenshot(path=str(current_hero_path))
+            else:
+                raise Exception("hero locator not found; using page.clip")
+        except Exception:
+            await page.screenshot(path=str(current_hero_path), clip={"x": max(0, bbox['x']), "y": max(0, bbox['y']), "width": bbox['width'], "height": bbox['height']})
         print("Saved hero section screenshot as hero_ad_only.png")
 
-        # === OCR + PIXEL comparison with tunable thresholds & blur  ⟵ CHANGED ===
+        # === OCR + PIXEL comparison with tunable thresholds & blur ===
         ocr_match, pixels_ok, details = compare_images_ocr_and_pixels(
             baseline_hero_path,
             current_hero_path,
-            rms_threshold=float(os.getenv("HERO_RMS_THRESHOLD", "12.0")),     # CHANGED (was 3.0)
-            change_threshold=float(os.getenv("HERO_CHANGE_THRESHOLD", "60.0")), # CHANGED (percent)
-            blur_radius=int(os.getenv("HERO_BLUR_RADIUS", "2")),               # CHANGED (px)
+            rms_threshold=float(os.getenv("HERO_RMS_THRESHOLD", "12.0")),
+            change_threshold=float(os.getenv("HERO_CHANGE_THRESHOLD", "60.0")),
+            blur_radius=int(os.getenv("HERO_BLUR_RADIUS", "2")),
         )
         print(f"[COMPARE] {details}")
 
-        # If OCR matches but pixel differences exist, include info about '.control-nav'
         if ocr_match and not pixels_ok:
             try:
                 control_nav_count = await page.locator(".control-nav").count()
             except Exception:
-                control_nav_count = -1  # sentinel if query fails
+                control_nav_count = -1
             extra = f" OCR PASSED, but pixel differences detected. '.control-nav' count={control_nav_count}."
             pytest.fail("Hero image mismatch: " + details + extra)
 
-        # Original behaviors preserved for hard fails when needed
         if not ocr_match:
             pytest.fail(f"Hero image mismatch (OCR): {details}")
         if not pixels_ok:
