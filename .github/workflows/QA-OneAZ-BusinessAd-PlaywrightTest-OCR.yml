@@ -5,10 +5,10 @@ on:
   # Not scheduled to run daily but can trigger manually or change to detect repo commits on main branch for backend and front end
   # schedule:
   #   - cron: "0 13 * * *"   # Runs daily at 13:00 UTC (5am/6am Pacific depending on DST)
+  workflow_dispatch: # Allow manual runs from GitHub UI
   push:
-    branches: ["**"]
-  pull_request:
-    branches: ["**"]
+     paths:
+       - "fin-tests/QA/oneaz/**" # only when files in this folder change
 
 jobs:
   test:
