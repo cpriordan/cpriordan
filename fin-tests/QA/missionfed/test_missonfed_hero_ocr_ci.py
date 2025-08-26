@@ -1,4 +1,4 @@
-# QA version of test_missionfed_hero_ocr_ci with fixes for missing #homeSlider (use #main .hero)
+# QA version of test_missionfed_hero_ocr_ci with resilient #main .hero handling for MissionFed
 
 import asyncio
 import pytest
@@ -239,7 +239,7 @@ async def wait_for_js_and_element(page, selector, timeout=45000):
 
 
 async def freeze_visual_changes(page):
-    # Support both legacy #homeSlider and MissionFed's .hero under #main  ⟵ FIXED
+    # Support both legacy #homeSlider and MissionFed's .hero under #main  FIXED
     await page.add_style_tag(content="""
       * { transition: none !important; animation: none !important; }
       #homeSlider .slick-track, #main .hero .slick-track { transform: none !important; }
@@ -445,7 +445,7 @@ async def test_missionfed_hero_ocr_ci(
         'settings.js?code=missionfed:80',
     ]
     error_tracker = []
-    
+
     def detect_js_errors_from_specific_files(client: str, page, specific_files: list[str], error_tracker: list[str], screenshots_directory: str | Path):
         screenshots_directory = Path(screenshots_directory)
         async def handle_console_message(msg):
@@ -518,8 +518,7 @@ async def test_missionfed_hero_ocr_ci(
             print("[HERO-CLEAN] No unexpected selector list provided; skipping hero DOM check.")
         else:
             for sel in unexpected_in_hero_selectors:
-                # Use MissionFed container instead of #homeSlider  ⟵ FIXED
-                scoped = f"#main .hero {sel}" if not sel.strip().startswith("#main .hero") else sel  # ⟵ FIXED
+                scoped = f"#main .hero {sel}" if not sel.strip().startswith("#main .hero") else sel  # FIXED
                 cnt = await page.locator(scoped).count()
                 if cnt > 0:
                     try:
@@ -532,19 +531,31 @@ async def test_missionfed_hero_ocr_ci(
                 else:
                     print(f"[HERO-CLEAN] No matches for '{sel}' inside #main .hero.")
 
-        # Use a resilient hero selector that supports both layouts  NEW
-        hero_selector = "#homeSlider, #main .hero"  # FIXED (added #main .hero)
-        hero_loc = page.locator(hero_selector).first
+        # ==== HERO RESOLUTION (robust) ====
+        HERO_SEL = "#main .hero"  #  FIXED: drop #homeSlider entirely
+        
+        # Wait via JS so we don't hang the Locator if selector slightly differs  ⟵ NEW
+        await page.wait_for_function(
+            "sel => !!document.querySelector(sel)",
+            arg=HERO_SEL,
+            timeout=20000,
+        )
+        
+        # Try to get a bounding box via JS (works even if Playwright thinks it's not visible)  ⟵ NEW
+        bbox = await page.evaluate(
+            """
+            (sel) => {
+              let el = document.querySelector(sel);
+              if (!el) return null;
+              el.style.visibility='visible'; el.style.opacity='1';
+              el.scrollIntoView({ block: 'start' });
+              const r = el.getBoundingClientRect();
+              return {x:r.x, y:r.y, width:Math.max(1,r.width), height:Math.max(1,r.height)};
+            }
+            """,
+            HERO_SEL,
+        )
 
-        # Wait a bit for the hero to attach/become visible, but don't hard-timeout later  NEW
-        await hero_loc.wait_for(state="attached", timeout=10000)  # NEW
-        try:
-            await hero_loc.wait_for(state="visible", timeout=5000)  #  NEW
-        except PlaywrightTimeoutError:
-            print("[HERO] Attached but not visible; proceeding with clip capture.")
-
-        # If we still can't resolve bbox, fall back to baseline-sized clip  NEW
-        bbox = await hero_loc.bounding_box()
         if not bbox:
             print("Hero bbox not resolved; using baseline-sized fallback clip at top of page.")
             try:
@@ -552,17 +563,22 @@ async def test_missionfed_hero_ocr_ci(
             except Exception:
                 bw, bh = (1280, 540)
             bbox = {"x": 0, "y": 0, "width": bw, "height": max(1, bh)}
-        print(f"DEBUG hero locator bbox (w x h): {bbox['width']} x {bbox['height']}")
+        print(f"DEBUG hero bbox (w x h): {bbox['width']} x {bbox['height']}")
 
         current_hero_path = current_dir / 'hero_ad_only.png'
-        # Prefer element screenshot if possible, else page clip  NEW
+
+        # Prefer element screenshot if present; otherwise use the page clip  ⟵ NEW
         try:
+            hero_loc = page.locator(HERO_SEL).first
             if await hero_loc.count() > 0:
                 await hero_loc.screenshot(path=str(current_hero_path))
             else:
                 raise Exception("hero locator not found; using page.clip")
         except Exception:
-            await page.screenshot(path=str(current_hero_path), clip={"x": max(0, bbox['x']), "y": max(0, bbox['y']), "width": bbox['width'], "height": bbox['height']})
+            await page.screenshot(
+                path=str(current_hero_path),
+                clip={"x": max(0, bbox['x']), "y": max(0, bbox['y']), "width": bbox['width'], "height": bbox['height']}
+            )
         print("Saved hero section screenshot as hero_ad_only.png")
 
         # === OCR + PIXEL comparison with tunable thresholds & blur ===
