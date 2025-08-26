@@ -3,13 +3,14 @@ name: OneAZ Business Ad Hero test using OCR
 
 # DE-ACTIVATED SINCE CAUSE PIXEL DIFFERENCE WITH BACKGROUN CHANGE
 on:
+    workflow_dispatch: # Allow manual runs from GitHub UI
 #   push:
 #     branches: ["**"]
 #   pull_request:
 #     branches: ["**"]
 #   schedule:
 #     - cron: "0 13 * * *"
-workflow_dispatch: # Allow manual runs from GitHub UI
+
 
 jobs:
   test:
