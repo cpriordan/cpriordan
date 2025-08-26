@@ -1,4 +1,4 @@
-# QA version of test_missionfed_hero_ocr_ci with resilient #main .hero handling for MissionFed
+# QA version of test_missionfed_hero_ocr_ci with resilient #main .hero handling (no page.wait_for_function)
 
 import asyncio
 import pytest
@@ -239,7 +239,7 @@ async def wait_for_js_and_element(page, selector, timeout=45000):
 
 
 async def freeze_visual_changes(page):
-    # Support both legacy #homeSlider and MissionFed's .hero under #main  FIXED
+    # Support both legacy #homeSlider and MissionFed's .hero under #main  ⟵ FIXED
     await page.add_style_tag(content="""
       * { transition: none !important; animation: none !important; }
       #homeSlider .slick-track, #main .hero .slick-track { transform: none !important; }
@@ -518,7 +518,7 @@ async def test_missionfed_hero_ocr_ci(
             print("[HERO-CLEAN] No unexpected selector list provided; skipping hero DOM check.")
         else:
             for sel in unexpected_in_hero_selectors:
-                scoped = f"#main .hero {sel}" if not sel.strip().startswith("#main .hero") else sel  # FIXED
+                scoped = f"#main .hero {sel}" if not sel.strip().startswith("#main .hero") else sel  # ⟵ FIXED
                 cnt = await page.locator(scoped).count()
                 if cnt > 0:
                     try:
@@ -531,24 +531,29 @@ async def test_missionfed_hero_ocr_ci(
                 else:
                     print(f"[HERO-CLEAN] No matches for '{sel}' inside #main .hero.")
 
-        # ==== HERO RESOLUTION (robust) ====
-        HERO_SEL = "#main .hero"  #  FIXED: drop #homeSlider entirely
-        
-        # Wait via JS so we don't hang the Locator if selector slightly differs  ⟵ NEW
-        await page.wait_for_function(
-            "sel => !!document.querySelector(sel)",
-            arg=HERO_SEL,
-            timeout=20000,
+        # ==== HERO RESOLUTION (robust, no page.wait_for_function) ====
+        HERO_SEL = "#main .hero"  # ⟵ FIXED: definitive selector for MissionFed
+
+        hero_loc = page.locator(HERO_SEL).first
+        # Attach-only wait avoids visibility flakiness  ⟵ NEW
+        try:
+            await hero_loc.wait_for(state="attached", timeout=10000)
+            print("[HERO] Attached.")
+        except PlaywrightTimeoutError:
+            print("[HERO] Not attached in 10s; proceeding with JS bbox fallback.")
+
+        # Force visible + scroll into view regardless of computed styles  ⟵ NEW
+        await page.evaluate(
+            "sel => { const el=document.querySelector(sel); if(el){ el.style.visibility='visible'; el.style.opacity='1'; el.scrollIntoView({block:'start'}); } }",
+            HERO_SEL,
         )
-        
-        # Try to get a bounding box via JS (works even if Playwright thinks it's not visible)  ⟵ NEW
+
+        # Get bbox via JS (works even if Locator can't compute bbox yet)  ⟵ NEW
         bbox = await page.evaluate(
             """
             (sel) => {
-              let el = document.querySelector(sel);
+              const el = document.querySelector(sel);
               if (!el) return null;
-              el.style.visibility='visible'; el.style.opacity='1';
-              el.scrollIntoView({ block: 'start' });
               const r = el.getBoundingClientRect();
               return {x:r.x, y:r.y, width:Math.max(1,r.width), height:Math.max(1,r.height)};
             }
@@ -567,9 +572,8 @@ async def test_missionfed_hero_ocr_ci(
 
         current_hero_path = current_dir / 'hero_ad_only.png'
 
-        # Prefer element screenshot if present; otherwise use the page clip  ⟵ NEW
+        # Prefer Locator screenshot if attached; else use page.clip  ⟵ NEW
         try:
-            hero_loc = page.locator(HERO_SEL).first
             if await hero_loc.count() > 0:
                 await hero_loc.screenshot(path=str(current_hero_path))
             else:
