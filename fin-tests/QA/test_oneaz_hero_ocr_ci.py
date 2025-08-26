@@ -1,5 +1,5 @@
-# === QA test_oneaz_hero_ocr_ci.py (UPDATED to fix JS f-string NameError and Python SyntaxError)
-# All edits since your last version are marked with  ⟵ FIXED  or  ⟵ CHANGED .
+# === QA test_oneaz_hero_ocr_ci.py (UPDATE: mitigate 403 Forbidden)
+
 
 import asyncio
 import pytest
@@ -217,7 +217,7 @@ async def navigate_and_settle(
                 try:
                     await page.wait_for_selector(ready_selector, state="attached", timeout=min(10000, nav_timeout))
                     await page.evaluate(
-                        "sel => { const el=document.querySelector(sel); if(el){ el.scrollIntoView({ block: 'start' }); el.style.visibility='visible'; el.style.opacity='1'; } }",  # ⟵ FIXED (spaces/quotes)
+                        "sel => { const el=document.querySelector(sel); if(el){ el.scrollIntoView({ block: 'start' }); el.style.visibility='visible'; el.style.opacity='1'; } }",  # CHANGED
                         ready_selector,
                     )
                     try:
@@ -368,7 +368,6 @@ def compare_images_ocr_and_pixels(
             print(f"[OCR] baseline: '{base_txt}'")
             print(f"[OCR] current : '{curr_txt}'")
             ocr_match = bool(base_txt and curr_txt and base_txt == curr_txt)
-            # ⟵ FIXED: use a proper triple-quoted f-string instead of an invalid multi-line f-string
             ocr_msg = (
                 "OCR text matches." if ocr_match else
                 f"""OCR text differs.\nBaseline: '{base_txt}'\nCurrent : '{curr_txt}'"""
@@ -398,6 +397,13 @@ async def browser(request):
     username = os.getenv("BASIC_AUTH_USER") or param_user or "OneAZ"
     password = os.getenv("BASIC_AUTH_PASS") or param_pass or "pugs r potatoes!3"
 
+    # Realistic desktop UA commonly accepted by WAFs ⟵ NEW
+    REALISTIC_UA = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/119.0.0.0 Safari/537.36"
+    )
+
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(
             headless=HEADLESS,
@@ -408,13 +414,37 @@ async def browser(request):
                 "--disable-background-timer-throttling",
                 "--no-default-browser-check",
                 "--no-first-run",
+                "--disable-blink-features=AutomationControlled",  # ⟵ NEW: reduce fingerprint of automation
             ],
         )
         context = await browser.new_context(
             http_credentials={"username": username, "password": password},
             device_scale_factor=1,
             viewport={"width": 1280, "height": 900},
+            user_agent=REALISTIC_UA,                 # ⟵ NEW
+            locale="en-US",                         # ⟵ NEW
+            ignore_https_errors=True,                # ⟵ NEW (be tolerant; some envs use self-signed)
+            bypass_csp=True,                         # ⟵ NEW (ensures our style tags can apply)
+            extra_http_headers={                     # ⟵ NEW
+                "Accept-Language": "en-US,en;q=0.9",
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "DNT": "1",
+            },
         )
+
+        # Stealth-ish patches ⟵ NEW
+        await context.add_init_script(
+            """
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            // Basic language + plugins spoofing
+            Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
+            """
+        )
+
         context.set_default_timeout(60000)
         context.set_default_navigation_timeout(60000)
         try:
@@ -543,7 +573,7 @@ async def test_oneaz_hero_ocr_ci(
             print("wait_for_function: hero not found by selector set; will try heading fallback.")
 
         # 2) Resolve hero via selector set, else via heading container
-        hero_selector_js = "#homeSlider, .hero-row#homeSlider, .hero-row"  # FIXED (remove extra quotes)
+        hero_selector_js = "#homeSlider, .hero-row#homeSlider, .hero-row"
         bbox = await page.evaluate("""
             (sel) => {
               let el = document.querySelector(sel);
@@ -553,7 +583,7 @@ async def test_oneaz_hero_ocr_ci(
               }
               if (!el) return null;
               el.style.visibility='visible'; el.style.opacity='1';
-              el.scrollIntoView({ block: 'start' });  // ⟵ FIXED: JS object literal; not interpolated by Python
+              el.scrollIntoView({ block: 'start' });
               const r = el.getBoundingClientRect();
               return {x:r.x, y:r.y, width:Math.max(1,r.width), height:Math.max(1,r.height)};
             }
