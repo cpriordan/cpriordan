@@ -1,4 +1,4 @@
-# QA version of test_gocu_hero_ocr_ci with resilient #main .hero handling (no page.wait_for_function)
+# QA version of test_gocu_hero_ocr_ci with resilient #main .hero handling and updated links for GOCU
 
 import asyncio
 import pytest
@@ -394,10 +394,10 @@ async def browser(request):
 @pytest.mark.parametrize("browser", [{"username": "OneAZ", "password": "pugs r potatoes!3"}], indirect=True)
 async def test_gocu_hero_ocr_ci(
     browser,
-    homepage_url="https://stage.gocu.com/?cb=1&api=stg",
-    test_scenario_url="https://stage.gocu.com/auto-loans/",
-    expected_heading="DRIVE AWAY WITH BETTER RATES.",
-    hero_heading_selector="#main > div.new-container > div.hero > div.hero__content > div > div > div",
+    homepage_url="https://georgiasownstg.wpengine.com/?api=stg",
+    test_scenario_url="https://georgiasownstg.wpengine.com/checking/student-access",
+    expected_heading="Level up your financial game",
+    hero_heading_selector="#main > section:nth-child(1) > div > div",
     client="gocu",
     html_finalytics_prod_cloudfront="//d1v4vw9mwf7wyh.cloudfront.net",
     html_finalytics_prod_cloudfront2="https://d1v4vw9mwf7wyh.cloudfront.net",
