@@ -1,6 +1,7 @@
-# QA version of test_gocu_hero_ocr_ci with resilient #main hero handling only (updated links for GOCU and more fixes for font waits)
+# QA version of test_gocu_hero_ocr_ci with resilient #main hero handling only (updated links for GOCU and **CDP fallback** to bypass font waits)
 
 import asyncio
+import base64  # ⟵ NEW
 import pytest
 import pytest_asyncio
 import sys
@@ -222,6 +223,46 @@ async def navigate_and_settle(page, url: str, ready_selector: str | None = None,
             pass
 
 # =====================
+# Screenshot helpers (skip font waits)
+# =====================
+
+async def safe_page_screenshot(page, *, path: str | Path, full_page: bool = False, clip: Optional[dict] = None, timeout: int = 20000):
+    """Try standard screenshot first; on timeout, fall back to Chrome CDP capture which doesn't wait on fonts."""
+    try:
+        return await page.screenshot(path=str(path), full_page=full_page, clip=clip, animations='disabled', timeout=timeout)  # ⟵ CHANGED
+    except PlaywrightTimeoutError as e:
+        print("[SCREENSHOT] Standard screenshot timed out; attempting CDP fallback…")  # ⟵ NEW
+        try:
+            client = await page.context.new_cdp_session(page)  # ⟵ NEW
+            await client.send('Page.enable')                   # ⟵ NEW
+            # Ensure layout is flushed
+            await page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")  # ⟵ NEW
+            params = {"format": "png", "fromSurface": True}
+            if clip:
+                # CDP expects floats and a 'clip' inside capture params
+                params["clip"] = {
+                    "x": float(clip["x"]),
+                    "y": float(clip["y"]),
+                    "width": float(clip["width"]),
+                    "height": float(clip["height"]),
+                    "scale": 1.0,
+                }
+            if full_page and not clip:
+                # Resize to full height before capture
+                height = await page.evaluate("() => Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)")
+                await page.set_viewport_size({"width": page.viewport_size["width"], "height": min(max(700, height), 10000)})
+            data = await client.send('Page.captureScreenshot', params)
+            png_bytes = base64.b64decode(data['data'])
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            with open(path, 'wb') as f:
+                f.write(png_bytes)
+            print(f"[SCREENSHOT] CDP fallback wrote {path}")
+            return True
+        except Exception as ee:
+            print(f"[SCREENSHOT] CDP fallback failed: {ee}")
+            raise e
+
+# =====================
 # DOM helpers / visual stability
 # =====================
 
@@ -373,6 +414,7 @@ async def browser(request):
                 "--disable-background-timer-throttling",
                 "--no-default-browser-check",
                 "--no-first-run",
+                "--disable-remote-fonts",  # ⟵ NEW (Chromium flag)
             ],
         )
         context = await browser.new_context(
@@ -381,43 +423,36 @@ async def browser(request):
             viewport={"width": 1280, "height": 900},
         )
 
-        # NEW ✨: Override FontFaceSet across ALL frames (including iframes) *before* any page scripts run
+        # Strong patch for FontFaceSet + iframes  ⟵ NEW
         await context.add_init_script(
             """
             (() => {
               function patch(win){
                 try{
-                  const FFS = win.FontFaceSet && win.FontFaceSet.prototype;
-                  if(FFS){
-                    try{ Object.defineProperty(FFS, 'ready', { get(){ return Promise.resolve(this); } }); }catch(e){}
-                    try{ FFS.load = async function(){ return []; }; }catch(e){}
+                  const ffs = win.document && win.document.fonts;
+                  if(ffs){
+                    try{ Object.defineProperty(ffs, 'ready', { get(){ return Promise.resolve(ffs); } }); }catch(e){}
+                    try{ ffs.load = async function(){ return []; }; }catch(e){}
+                  }
+                  const Proto = win.FontFaceSet && win.FontFaceSet.prototype;
+                  if(Proto){
+                    try{ Object.defineProperty(Proto, 'ready', { get(){ return Promise.resolve(this); } }); }catch(e){}
+                    try{ Proto.load = async function(){ return []; }; }catch(e){}
                   }
                 }catch(_){ }
               }
               patch(window);
-              // Some pages create/attach iframes dynamically; hook to patch them too
               try{
-                const mo = new MutationObserver((muts)=>{
-                  for(const m of muts){
-                    for(const n of m.addedNodes){
-                      if(n && n.tagName === 'IFRAME' && n.contentWindow){
-                        try{ patch(n.contentWindow); }catch(e){}
-                      }
-                    }
-                  }
-                });
-                mo.observe(document, {childList:true, subtree:true});
+                new MutationObserver(m=>m.forEach(r=>r.addedNodes.forEach(n=>{try{if(n.tagName==='IFRAME'&&n.contentWindow)patch(n.contentWindow)}catch(_){}}))).observe(document,{childList:true,subtree:true});
               }catch(_){ }
             })();
             """
-        )  # ⟵ NEW (stronger)
+        )
 
-        # NEW: Block *font* resource_type everywhere (covers no-extension font URLs too)
-        await context.route("**/*", lambda route: route.abort() if route.request.resource_type == 'font' else route.continue_())  # ⟵ NEW
-
-        # (kept) optional global switch via env to also block font file extensions from odd CDNs
-        if os.getenv("BLOCK_FONT_EXT", "1").lower() in {"1", "true", "yes"}:  # ⟵ NEW
-            await context.route("**/*.{woff,woff2,ttf,otf}", lambda route: route.abort())  # ⟵ NEW
+        # Block fonts at network layer  ⟵ NEW
+        await context.route("**/*", lambda route: route.abort() if route.request.resource_type == 'font' else route.continue_())
+        if os.getenv("BLOCK_FONT_EXT", "1").lower() in {"1","true","yes"}:
+            await context.route("**/*.{woff,woff2,ttf,otf}", lambda route: route.abort())
 
         context.set_default_timeout(45000)
         context.set_default_navigation_timeout(45000)
@@ -476,27 +511,25 @@ async def test_gocu_hero_ocr_ci(
 
     page = await browser.new_page()
 
-    # EXTRA: also inject patches on this page specifically (defense-in-depth)  ⟵ NEW
+    # Page-level patch (defense-in-depth)  ⟵ NEW
     await page.add_init_script(
         """
         (() => {
           try{
-            const FFS = window.FontFaceSet && window.FontFaceSet.prototype;
-            if(FFS){
-              try{ Object.defineProperty(FFS, 'ready', { get(){ return Promise.resolve(this); } }); }catch(e){}
-              try{ FFS.load = async function(){ return []; }; }catch(e){}
+            const ffs = document.fonts;
+            if(ffs){
+              try{ Object.defineProperty(ffs, 'ready', { get(){ return Promise.resolve(ffs); } }); }catch(e){}
+              try{ ffs.load = async function(){ return []; }; }catch(e){}
             }
           }catch(_){ }
         })();
         """
-    )  # ⟵ NEW
+    )
 
-    # EXTRA: force system fonts (prevents layout shift even with fonts blocked)
-    await page.add_style_tag(content="*{font-family: Arial, Helvetica, sans-serif !important}")  # ⟵ CHANGED
-
-    # Reduce motion globally to limit any animation work during screenshots  ⟵ NEW
+    # Force system fonts + reduced motion
+    await page.add_style_tag(content="*{font-family: Arial, Helvetica, sans-serif !important}")
     try:
-        await page.emulate_media(reduced_motion='reduce')  # ⟵ NEW
+        await page.emulate_media(reduced_motion='reduce')
     except Exception:
         pass
 
@@ -523,7 +556,7 @@ async def test_gocu_hero_ocr_ci(
                     print(error_message)
                     error_tracker.append(error_message)
                     screenshot_path = screenshots_directory / f"js_error_{client}.png"
-                    await page.screenshot(path=str(screenshot_path), animations='disabled', timeout=15000)  # keep fast  ⟵ CHANGED
+                    await safe_page_screenshot(page, path=screenshot_path, timeout=15000)  # ⟵ CHANGED
                     print(f"Screenshot of JS error saved at {screenshot_path} for client {client}")
             except Exception as e:
                 print(f"Console handler failed: {e}")
@@ -546,8 +579,8 @@ async def test_gocu_hero_ocr_ci(
             max_wait=12000,
         )
 
-        # Full-page screenshot with animations disabled, *and* fonts blocked/patched  ⟵ CHANGED
-        await page.screenshot(path=str(current_dir / 'homepage_screenshot.png'), full_page=True, animations='disabled', timeout=20000)
+        # Use safe screenshot wrapper with CDP fallback  ⟵ CHANGED
+        await safe_page_screenshot(page, path=current_dir / 'homepage_screenshot.png', full_page=True, timeout=20000)
         await save_page_source(page, current_dir / 'homepage_source.html')
 
         print(f"Going to test_scenario_url {test_scenario_url}...")
@@ -561,7 +594,7 @@ async def test_gocu_hero_ocr_ci(
             max_wait=12000,
         )
 
-        await page.screenshot(path=str(current_dir / 'product_page_for_ad_screenshot.png'), full_page=True, animations='disabled', timeout=20000)  # ⟵ CHANGED
+        await safe_page_screenshot(page, path=current_dir / 'product_page_for_ad_screenshot.png', full_page=True, timeout=20000)  # ⟵ CHANGED
 
         print(f"Returning to homepage_url {homepage_url} to view the ad...")
         await navigate_and_settle(
@@ -597,9 +630,8 @@ async def test_gocu_hero_ocr_ci(
                 else:
                     print(f"[HERO-CLEAN] No matches for '{sel}' inside #main .hero.")
 
-        # ==== HERO RESOLUTION (robust, no page.wait_for_function) ====
-        HERO_SEL = "#main .hero"  # ⟵ FIXED: definitive selector for gocu
-
+        # ==== HERO RESOLUTION (robust) ====
+        HERO_SEL = "#main .hero"
         hero_loc = page.locator(HERO_SEL).first
         try:
             await hero_loc.wait_for(state="attached", timeout=10000)
@@ -635,18 +667,8 @@ async def test_gocu_hero_ocr_ci(
 
         current_hero_path = current_dir / 'hero_ad_only.png'
 
-        try:
-            if await hero_loc.count() > 0:
-                await hero_loc.screenshot(path=str(current_hero_path), animations='disabled', timeout=20000)
-            else:
-                raise Exception("hero locator not found; using page.clip")
-        except Exception:
-            await page.screenshot(
-                path=str(current_hero_path),
-                clip={"x": max(0, bbox['x']), "y": max(0, bbox['y']), "width": bbox['width'], "height": bbox['height']},
-                animations='disabled',
-                timeout=20000,
-            )
+        # Always use CDP-capable wrapper for hero capture (avoids Playwright font waits)  ⟵ CHANGED
+        await safe_page_screenshot(page, path=current_hero_path, clip={"x": max(0, bbox['x']), "y": max(0, bbox['y']), "width": bbox['width'], "height": bbox['height']}, timeout=20000)
         print("Saved hero section screenshot as hero_ad_only.png")
 
         # === OCR + PIXEL comparison with tunable thresholds & blur ===
