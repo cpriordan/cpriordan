@@ -1,5 +1,4 @@
-# === QA test_oneaz_hero_ocr_ci.py (UPDATE: mitigate 403 Forbidden)
-
+# === QA test_oneaz_hero_ocr_ci.py (UPDATE: mitigate persistent 403 Forbidden by spoofing headers + referrer retry)
 
 import asyncio
 import pytest
@@ -217,7 +216,7 @@ async def navigate_and_settle(
                 try:
                     await page.wait_for_selector(ready_selector, state="attached", timeout=min(10000, nav_timeout))
                     await page.evaluate(
-                        "sel => { const el=document.querySelector(sel); if(el){ el.scrollIntoView({ block: 'start' }); el.style.visibility='visible'; el.style.opacity='1'; } }",  # CHANGED
+                        "sel => { const el=document.querySelector(sel); if(el){ el.scrollIntoView({ block: 'start' }); el.style.visibility='visible'; el.style.opacity='1'; } }",  # ⟵ FIXED
                         ready_selector,
                     )
                     try:
@@ -258,7 +257,6 @@ async def wait_for_js_and_element(page, selector, timeout=45000):
 
 
 async def _dismiss_overlays(page):
-    """Best-effort close cookie banners/overlays that can hide #homeSlider."""
     selectors = [
         "button#onetrust-accept-btn-handler",
         "button:has-text('Accept All')",
@@ -282,7 +280,7 @@ async def freeze_visual_changes(page):
       #homeSlider .slick-track { transform: none !important; }
       #homeSlider .slick-slide { opacity: 1 !important; }
       #homeSlider video, #homeSlider .bg, #homeSlider picture img, #homeSlider .slide img {
-        opacity: 0 !important; /* keep copy visible, hide background */
+        opacity: 0 !important;
       }
     """)
     await page.evaluate("""
@@ -387,7 +385,7 @@ def compare_images_ocr_and_pixels(
     return ocr_match, pixels_ok, details
 
 # =====================
-# Browser fixture (CI-ready)
+# Browser fixture (CI-ready) with stealth-ish headers
 # =====================
 
 @pytest_asyncio.fixture
@@ -397,7 +395,7 @@ async def browser(request):
     username = os.getenv("BASIC_AUTH_USER") or param_user or "OneAZ"
     password = os.getenv("BASIC_AUTH_PASS") or param_pass or "pugs r potatoes!3"
 
-    # Realistic desktop UA commonly accepted by WAFs ⟵ NEW
+    # Realistic desktop UA commonly accepted by WAFs  ⟵ NEW
     REALISTIC_UA = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -414,7 +412,7 @@ async def browser(request):
                 "--disable-background-timer-throttling",
                 "--no-default-browser-check",
                 "--no-first-run",
-                "--disable-blink-features=AutomationControlled",  # ⟵ NEW: reduce fingerprint of automation
+                "--disable-blink-features=AutomationControlled",  # ⟵ NEW
             ],
         )
         context = await browser.new_context(
@@ -423,23 +421,26 @@ async def browser(request):
             viewport={"width": 1280, "height": 900},
             user_agent=REALISTIC_UA,                 # ⟵ NEW
             locale="en-US",                         # ⟵ NEW
-            ignore_https_errors=True,                # ⟵ NEW (be tolerant; some envs use self-signed)
-            bypass_csp=True,                         # ⟵ NEW (ensures our style tags can apply)
-            extra_http_headers={                     # ⟵ NEW
+            ignore_https_errors=True,                # ⟵ NEW
+            bypass_csp=True,                         # ⟵ NEW
+            extra_http_headers={                     # ⟵ CHANGED: fuller desktop-like headers to avoid WAF 403
                 "Accept-Language": "en-US,en;q=0.9",
                 "Upgrade-Insecure-Requests": "1",
                 "Sec-Fetch-Dest": "document",
                 "Sec-Fetch-Mode": "navigate",
                 "Sec-Fetch-Site": "none",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",  # ⟵ NEW
+                "Cache-Control": "no-cache",  # ⟵ NEW
+                "Pragma": "no-cache",         # ⟵ NEW
+                "Referer": "https://oneazcuqa.oneazcu.com/",  # ⟵ NEW: default site referer
                 "DNT": "1",
             },
         )
 
-        # Stealth-ish patches ⟵ NEW
+        # Stealth-ish patches  ⟵ NEW
         await context.add_init_script(
             """
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            // Basic language + plugins spoofing
             Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
             Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
             """
@@ -556,6 +557,24 @@ async def test_oneaz_hero_ocr_ci(
         )
 
         await _dismiss_overlays(page)
+
+        # ⟵ NEW: If a WAF interstitial returned a 403 page, retry with a real referrer
+        async def _looks_forbidden(p):
+            try:
+                body_text = await p.evaluate("() => document.body ? document.body.innerText : ''")
+                title = await p.title()
+                return ("403" in (title or "").lower()) or ("forbidden" in body_text.lower())
+            except Exception:
+                return False
+
+        if await _looks_forbidden(page):
+            print("[WAF] 403/Forbidden detected. Retrying navigation with Referer + no-cache headers...")
+            try:
+                await page.goto(homepage_url, wait_until="domcontentloaded", referer=test_scenario_url)
+                await wait_for_network_quiet(page)
+                await _dismiss_overlays(page)
+            except Exception as e:
+                print(f"[WAF] Retry after 403 failed: {e}")
 
         # Freeze motion and align viewport BEFORE capture
         await freeze_visual_changes(page)
