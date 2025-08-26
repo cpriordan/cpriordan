@@ -1,4 +1,4 @@
-# === QA test_oneaz_hero_ocr_ci.py (UPDATE: mitigate persistent 403 Forbidden by spoofing headers + referrer retry)
+# === QA test_oneaz_hero_ocr_ci.py (UPDATE v2: harder 403 mitigation)
 
 import asyncio
 import pytest
@@ -47,7 +47,7 @@ def _configure_tesseract() -> bool:
 TESSERACT_OK = _configure_tesseract()
 
 # =====================
-# File helpers
+# File helpers (same as before)
 # =====================
 
 def clear_screenshots_directory(directory: str | Path):
@@ -76,7 +76,7 @@ async def save_page_source(page, filepath: str | Path):
         print(f"Failed to save page source: {e}")
 
 # =====================
-# GitHub baseline download / resolve
+# GitHub baseline download / resolve (same as before)
 # =====================
 
 def _github_tree_to_raw(tree_url: str, filename: str) -> str:
@@ -133,33 +133,7 @@ def resolve_baseline_image(*, baseline_filename: str, test_dir: Path, baseline_r
     return download_baseline_from_github(github_tree_dir, baseline_filename, download_dest)
 
 # =====================
-# Console / JS error tracking (unchanged)
-# =====================
-
-def detect_js_errors_from_specific_files(client: str, page, specific_files: list[str], error_tracker: list[str], screenshots_directory: str | Path):
-    screenshots_directory = Path(screenshots_directory)
-
-    async def handle_console_message(msg):
-        try:
-            location = msg.location
-            file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
-            screenshots_directory.mkdir(parents=True, exist_ok=True)
-            if msg.type == 'error' and file_name.endswith('.js') and file_name in specific_files:
-                error_message = f"JS Error found in {file_name}: {msg.text} for client {client}"
-                print(error_message)
-                error_tracker.append(error_message)
-                screenshot_path = screenshots_directory / f"js_error_{client}.png"
-                await page.screenshot(path=str(screenshot_path))
-                print(f"Screenshot of JS error saved at {screenshot_path} for client {client}")
-        except Exception as e:
-            print(f"Console handler failed: {e}")
-
-    if not getattr(page, "_js_error_handler_set", False):
-        page.on('console', lambda msg: asyncio.create_task(handle_console_message(msg)))
-        setattr(page, "_js_error_handler_set", True)
-
-# =====================
-# Network/nav helpers (IMPROVED)
+# Network/nav helpers (same as before)
 # =====================
 
 async def wait_for_network_quiet(page, idle_ms: int = 1200, max_wait: int = 15000):
@@ -211,12 +185,14 @@ async def navigate_and_settle(
 ):
     for attempt in (1, 2):
         try:
-            await page.goto(url, wait_until=wait_until, timeout=nav_timeout)
+            resp = await page.goto(url, wait_until=wait_until, timeout=nav_timeout)  # ⟵ CHANGED: capture response
+            if resp and resp.status >= 400:
+                print(f"navigate_and_settle: initial status {resp.status} for {url}")
             if ready_selector:
                 try:
                     await page.wait_for_selector(ready_selector, state="attached", timeout=min(10000, nav_timeout))
                     await page.evaluate(
-                        "sel => { const el=document.querySelector(sel); if(el){ el.scrollIntoView({ block: 'start' }); el.style.visibility='visible'; el.style.opacity='1'; } }",  # ⟵ FIXED
+                        "sel => { const el=document.querySelector(sel); if(el){ el.scrollIntoView({ block: 'start' }); el.style.visibility='visible'; el.style.opacity='1'; } }",
                         ready_selector,
                     )
                     try:
@@ -228,7 +204,7 @@ async def navigate_and_settle(
                     print(f"navigate_and_settle: '{ready_selector}' not attached before quiet; continuing.")
             await wait_for_network_quiet(page, idle_ms=idle_ms, max_wait=max_wait)
             print("navigate_and_settle: network quiet.")
-            return
+            return resp  # ⟵ NEW
         except PlaywrightTimeoutError as e:
             if attempt == 1:
                 print(f"navigate_and_settle: nav attempt 1 failed ({e}); retrying after hard reload...")
@@ -240,7 +216,7 @@ async def navigate_and_settle(
             raise
 
 # =====================
-# DOM helpers / visual stability
+# DOM helpers / visual stability (same as before)
 # =====================
 
 async def wait_for_js_and_element(page, selector, timeout=45000):
@@ -301,7 +277,7 @@ async def align_viewport_to_baseline(page, baseline_img_path: Path, extra_height
     return bw, bh
 
 # =====================
-# OCR + PIXEL comparison (enhanced)
+# OCR + PIXEL comparison (same as before)
 # =====================
 
 def _normalize_text(txt: str) -> str:
@@ -385,7 +361,7 @@ def compare_images_ocr_and_pixels(
     return ocr_match, pixels_ok, details
 
 # =====================
-# Browser fixture (CI-ready) with stealth-ish headers
+# Browser fixture (CI-ready) with stronger anti-403 headers
 # =====================
 
 @pytest_asyncio.fixture
@@ -395,7 +371,6 @@ async def browser(request):
     username = os.getenv("BASIC_AUTH_USER") or param_user or "OneAZ"
     password = os.getenv("BASIC_AUTH_PASS") or param_pass or "pugs r potatoes!3"
 
-    # Realistic desktop UA commonly accepted by WAFs  ⟵ NEW
     REALISTIC_UA = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -412,32 +387,36 @@ async def browser(request):
                 "--disable-background-timer-throttling",
                 "--no-default-browser-check",
                 "--no-first-run",
-                "--disable-blink-features=AutomationControlled",  # ⟵ NEW
+                "--disable-blink-features=AutomationControlled",
             ],
         )
         context = await browser.new_context(
             http_credentials={"username": username, "password": password},
             device_scale_factor=1,
             viewport={"width": 1280, "height": 900},
-            user_agent=REALISTIC_UA,                 # ⟵ NEW
-            locale="en-US",                         # ⟵ NEW
-            ignore_https_errors=True,                # ⟵ NEW
-            bypass_csp=True,                         # ⟵ NEW
-            extra_http_headers={                     # ⟵ CHANGED: fuller desktop-like headers to avoid WAF 403
+            user_agent=REALISTIC_UA,
+            locale="en-US",
+            ignore_https_errors=True,
+            bypass_csp=True,
+            extra_http_headers={  # ⟵ CHANGED: mimic real top-level nav & same-origin hops
                 "Accept-Language": "en-US,en;q=0.9",
                 "Upgrade-Insecure-Requests": "1",
                 "Sec-Fetch-Dest": "document",
                 "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-Site": "same-origin",  # ⟵ CHANGED (was "none")
+                "Sec-Fetch-User": "?1",           # ⟵ NEW
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",  # ⟵ NEW
-                "Cache-Control": "no-cache",  # ⟵ NEW
-                "Pragma": "no-cache",         # ⟵ NEW
-                "Referer": "https://oneazcuqa.oneazcu.com/",  # ⟵ NEW: default site referer
-                "DNT": "1",
+                "Cache-Control": "no-cache",       # ⟵ NEW
+                "Pragma": "no-cache",              # ⟵ NEW
+                "Referer": "https://oneazcuqa.oneazcu.com/",  # ⟵ NEW default referer
+                # Client Hints (static fallbacks) ⟵ NEW
+                "sec-ch-ua": '"Chromium";v="119", "Not=A?Brand";v="24", "Google Chrome";v="119"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"Windows"',
             },
         )
 
-        # Stealth-ish patches  ⟵ NEW
+        # Stealth-ish patches (unchanged)
         await context.add_init_script(
             """
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
@@ -455,7 +434,7 @@ async def browser(request):
             await browser.close()
 
 # =====================
-# The test (with DOM assertion) + baseline resolve
+# The test (with WAF-aware retry)
 # =====================
 
 @pytest.mark.asyncio
@@ -513,12 +492,48 @@ async def test_oneaz_hero_ocr_ci(
         'settings.js?code=oneaz:80',
     ]
     error_tracker = []
+
+    # JS error tracker (unchanged)
+    def detect_js_errors_from_specific_files(client: str, page, specific_files: list[str], error_tracker: list[str], screenshots_directory: str | Path):
+        screenshots_directory = Path(screenshots_directory)
+        async def handle_console_message(msg):
+            try:
+                location = msg.location
+                file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
+                screenshots_directory.mkdir(parents=True, exist_ok=True)
+                if msg.type == 'error' and file_name.endswith('.js') and file_name in specific_files:
+                    error_message = f"JS Error found in {file_name}: {msg.text} for client {client}"
+                    print(error_message)
+                    error_tracker.append(error_message)
+                    screenshot_path = screenshots_directory / f"js_error_{client}.png"
+                    await page.screenshot(path=str(screenshot_path))
+                    print(f"Screenshot of JS error saved at {screenshot_path} for client {client}")
+            except Exception as e:
+                print(f"Console handler failed: {e}")
+        if not getattr(page, "_js_error_handler_set", False):
+            page.on('console', lambda msg: asyncio.create_task(handle_console_message(msg)))
+            setattr(page, "_js_error_handler_set", True)
+
     detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker, current_dir)
+
+    # Helper: detect 403/Forbidden content ⟵ NEW
+    async def looks_forbidden(p):
+        try:
+            body_text = await p.evaluate("() => document.body ? document.body.innerText : ''")
+            title = await p.title()
+            return ("403" in (title or "").lower()) or ("forbidden" in (body_text or "").lower())
+        except Exception:
+            return False
+
+    # Helper: simulate a user click navigation to set Sec-Fetch-User properly ⟵ NEW
+    async def user_click_navigate(p, url):
+        await p.evaluate("(u)=>{ const a=document.createElement('a'); a.href=u; a.rel='noopener'; a.textContent='go'; document.body.appendChild(a); a.click(); }", url)
+        await wait_for_network_quiet(p)
 
     print(f"About to go to home_url {homepage_url}")
     try:
         print(f"Going to homepage_url {homepage_url}...")
-        await navigate_and_settle(
+        resp = await navigate_and_settle(
             page,
             homepage_url,
             ready_selector="#homeSlider",
@@ -528,12 +543,17 @@ async def test_oneaz_hero_ocr_ci(
             max_wait=15000,
         )
 
+        if resp and resp.status >= 400:
+            print(f"[WAF] Home returned status {resp.status}; retry via user-like click…")  # ⟵ NEW
+            await user_click_navigate(page, homepage_url)
+
+        # First pass: close overlays and save source
         await _dismiss_overlays(page)
         await page.screenshot(path=str(current_dir / 'homepage_screenshot.png'), full_page=True)
         await save_page_source(page, current_dir / 'homepage_source.html')
 
         print(f"Going to test_scenario_url {test_scenario_url}...")
-        await navigate_and_settle(
+        resp2 = await navigate_and_settle(
             page,
             test_scenario_url,
             ready_selector="body",
@@ -542,46 +562,35 @@ async def test_oneaz_hero_ocr_ci(
             idle_ms=900,
             max_wait=15000,
         )
+        if resp2 and resp2.status >= 400:
+            print(f"[WAF] Scenario returned status {resp2.status}; retry via user-like click…")  # ⟵ NEW
+            await user_click_navigate(page, test_scenario_url)
 
         await page.screenshot(path=str(current_dir / 'product_page_for_ad_screenshot.png'), full_page=True)
 
-        print(f"Returning to homepage_url {homepage_url} to view the ad...")
-        await navigate_and_settle(
-            page,
-            homepage_url,
-            ready_selector="#homeSlider",
-            wait_until="domcontentloaded",
-            nav_timeout=60000,
-            idle_ms=900,
-            max_wait=15000,
-        )
+        print(f"Returning to homepage_url {homepage_url} to view the ad…")
+        # Use explicit referer to mimic same-origin back-nav ⟵ NEW
+        ret = await page.goto(homepage_url, wait_until="domcontentloaded", referer=test_scenario_url)
+        await wait_for_network_quiet(page)
+        if ret and ret.status >= 400:
+            print(f"[WAF] Return got status {ret.status}; retry via in-page click with referer…")  # ⟵ NEW
+            await user_click_navigate(page, homepage_url)
+            await wait_for_network_quiet(page)
+
+        # If still forbidden, one last JS-based reload with cache-bypass ⟵ NEW
+        if await looks_forbidden(page):
+            print("[WAF] 403/Forbidden text detected after return; forcing cache-bypass reload…")
+            await page.evaluate("() => location.replace(location.href + (location.search ? '&' : '?') + 'nocache=1'))")
+            await wait_for_network_quiet(page)
 
         await _dismiss_overlays(page)
-
-        # ⟵ NEW: If a WAF interstitial returned a 403 page, retry with a real referrer
-        async def _looks_forbidden(p):
-            try:
-                body_text = await p.evaluate("() => document.body ? document.body.innerText : ''")
-                title = await p.title()
-                return ("403" in (title or "").lower()) or ("forbidden" in body_text.lower())
-            except Exception:
-                return False
-
-        if await _looks_forbidden(page):
-            print("[WAF] 403/Forbidden detected. Retrying navigation with Referer + no-cache headers...")
-            try:
-                await page.goto(homepage_url, wait_until="domcontentloaded", referer=test_scenario_url)
-                await wait_for_network_quiet(page)
-                await _dismiss_overlays(page)
-            except Exception as e:
-                print(f"[WAF] Retry after 403 failed: {e}")
 
         # Freeze motion and align viewport BEFORE capture
         await freeze_visual_changes(page)
         await align_viewport_to_baseline(page, baseline_hero_path)
         await page.evaluate("window.scrollTo(0,0)")
 
-        # 1) Poll for presence via JS (works even if Playwright thinks it's not visible/attached yet)
+        # Resolve hero
         try:
             await page.wait_for_function(
                 "() => !!document.querySelector('#homeSlider, .hero-row#homeSlider, .hero-row')",
@@ -591,7 +600,6 @@ async def test_oneaz_hero_ocr_ci(
         except PlaywrightTimeoutError:
             print("wait_for_function: hero not found by selector set; will try heading fallback.")
 
-        # 2) Resolve hero via selector set, else via heading container
         hero_selector_js = "#homeSlider, .hero-row#homeSlider, .hero-row"
         bbox = await page.evaluate("""
             (sel) => {
@@ -608,7 +616,6 @@ async def test_oneaz_hero_ocr_ci(
             }
         """, hero_selector_js)
 
-        # 3) If still missing, last-resort: clip top-of-page region sized like baseline
         if not bbox:
             print("Hero bbox not resolved; using baseline-sized fallback clip at top of page.")
             try:
@@ -620,7 +627,6 @@ async def test_oneaz_hero_ocr_ci(
         print(f"DEBUG hero bbox (w x h): {bbox['width']} x {bbox['height']}")
 
         current_hero_path = current_dir / 'hero_ad_only.png'
-        # Prefer element screenshot if resolvable; otherwise use page clip
         try:
             hero_locator = page.locator("#homeSlider, .hero-row#homeSlider, .hero-row").first
             if await hero_locator.count() > 0:
@@ -631,7 +637,7 @@ async def test_oneaz_hero_ocr_ci(
             await page.screenshot(path=str(current_hero_path), clip={"x": max(0,bbox['x']), "y": max(0,bbox['y']), "width": bbox['width'], "height": bbox['height']})
         print("Saved hero section screenshot as hero_ad_only.png")
 
-        # === OCR + PIXEL comparison with tunable thresholds & blur ===
+        # === OCR + PIXEL comparison
         ocr_match, pixels_ok, details = compare_images_ocr_and_pixels(
             baseline_hero_path,
             current_hero_path,
