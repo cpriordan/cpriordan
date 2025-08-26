@@ -1,4 +1,4 @@
-# QA version of test_gocu_hero_ocr_ci with resilient #main hero handling only (and updated links for GOCU)
+# QA version of test_gocu_hero_ocr_ci with resilient #main hero handling only (updated links for GOCU and changes to prevent timeout due to fonts download)
 
 import asyncio
 import pytest
@@ -378,6 +378,26 @@ async def browser(request):
             device_scale_factor=1,
             viewport={"width": 1280, "height": 900},
         )
+
+        # NEW ✨: Avoid Playwright waiting on webfonts for screenshots by overriding FontFaceSet.ready early
+        # This prevents "waiting for fonts to load..." stalls during page/locator.screenshot
+        await context.add_init_script(
+            """
+            (() => {
+              try {
+                const proto = (window.FontFaceSet && window.FontFaceSet.prototype) || null;
+                if (proto) {
+                  Object.defineProperty(proto, 'ready', { get() { return Promise.resolve(this); } });
+                }
+              } catch (e) { /* ignore */ }
+            })();
+            """
+        )  # ⟵ NEW
+
+        # NEW (optional): disable webfont requests entirely to speed up & avoid font-load hangs
+        if (os.getenv("DISABLE_WEBFONTS", "1").lower() in {"1", "true", "yes"}):  # ⟵ NEW
+            await context.route("**/*.{woff,woff2,ttf,otf}", lambda route: route.abort())  # ⟵ NEW
+
         context.set_default_timeout(45000)
         context.set_default_navigation_timeout(45000)
         try:
@@ -435,6 +455,9 @@ async def test_gocu_hero_ocr_ci(
 
     page = await browser.new_page()
 
+    # EXTRA: force system fonts to avoid late-loading webfonts changing layout  ⟵ NEW (defensive)
+    await page.add_style_tag(content="*{font-family: Arial, Helvetica, sans-serif !important}")  # ⟵ NEW
+
     specific_js_files = [
         'finalytics.js',
         'finalytics-function.js',
@@ -458,7 +481,8 @@ async def test_gocu_hero_ocr_ci(
                     print(error_message)
                     error_tracker.append(error_message)
                     screenshot_path = screenshots_directory / f"js_error_{client}.png"
-                    await page.screenshot(path=str(screenshot_path))
+                    # IMPORTANT: don't let this screenshot hang on fonts either  ⟵ NEW
+                    await page.screenshot(path=str(screenshot_path), animations='disabled', timeout=15000)  # ⟵ NEW
                     print(f"Screenshot of JS error saved at {screenshot_path} for client {client}")
             except Exception as e:
                 print(f"Console handler failed: {e}")
@@ -481,7 +505,8 @@ async def test_gocu_hero_ocr_ci(
             max_wait=12000,
         )
 
-        await page.screenshot(path=str(current_dir / 'homepage_screenshot.png'), full_page=True)
+        # Avoid font stalls for full-page screenshots  ⟵ NEW
+        await page.screenshot(path=str(current_dir / 'homepage_screenshot.png'), full_page=True, animations='disabled', timeout=20000)  # ⟵ CHANGED
         await save_page_source(page, current_dir / 'homepage_source.html')
 
         print(f"Going to test_scenario_url {test_scenario_url}...")
@@ -495,7 +520,7 @@ async def test_gocu_hero_ocr_ci(
             max_wait=12000,
         )
 
-        await page.screenshot(path=str(current_dir / 'product_page_for_ad_screenshot.png'), full_page=True)
+        await page.screenshot(path=str(current_dir / 'product_page_for_ad_screenshot.png'), full_page=True, animations='disabled', timeout=20000)  # ⟵ CHANGED
 
         print(f"Returning to homepage_url {homepage_url} to view the ad...")
         await navigate_and_settle(
@@ -575,13 +600,15 @@ async def test_gocu_hero_ocr_ci(
         # Prefer Locator screenshot if attached; else use page.clip  ⟵ NEW
         try:
             if await hero_loc.count() > 0:
-                await hero_loc.screenshot(path=str(current_hero_path))
+                await hero_loc.screenshot(path=str(current_hero_path), animations='disabled', timeout=20000)  # ⟵ CHANGED
             else:
                 raise Exception("hero locator not found; using page.clip")
         except Exception:
             await page.screenshot(
                 path=str(current_hero_path),
-                clip={"x": max(0, bbox['x']), "y": max(0, bbox['y']), "width": bbox['width'], "height": bbox['height']}
+                clip={"x": max(0, bbox['x']), "y": max(0, bbox['y']), "width": bbox['width'], "height": bbox['height']},
+                animations='disabled',  # ⟵ CHANGED
+                timeout=20000,          # ⟵ CHANGED
             )
         print("Saved hero section screenshot as hero_ad_only.png")
 
