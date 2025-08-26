@@ -1,13 +1,14 @@
 # NEW: GitHub Actions workflow to run OneAZ BusinessAd OCR-only hero test with Playwright + Tesseract
+#      Can run as a batch job, using the GitHub UI or when changes are detected in fin-tests/PROD/oneaz/ directory
 name: OneAZ Business Ad Hero test using OCR
 
 on:
   schedule:
     - cron: "0 13 * * *"   # Runs daily at 13:00 UTC (5am/6am Pacific depending on DST)
+  workflow_dispatch: # Allow manual runs from GitHub UI
   push:
-    branches: ["**"]
-  pull_request:
-    branches: ["**"]
+     paths:
+       - "fin-tests/PROD/oneaz/**" # only when files in this folder change
 
 jobs:
   test:
