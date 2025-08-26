@@ -1,4 +1,4 @@
-# QA version of test_gocu_hero_ocr_ci with resilient #main hero handling only (updated links for GOCU and changes to prevent timeout due to fonts download)
+# QA version of test_gocu_hero_ocr_ci with resilient #main hero handling only (updated links for GOCU and more fixes for font waits)
 
 import asyncio
 import pytest
@@ -30,8 +30,8 @@ def _configure_tesseract() -> bool:
     except Exception:
         pass
     possible_paths = [
-        r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
-        r"C:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe",
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
     ]
     for exe in possible_paths:
         if os.path.exists(exe):
@@ -334,7 +334,9 @@ def compare_images_ocr_and_pixels(
             ocr_match = bool(base_txt and curr_txt and base_txt == curr_txt)
             ocr_msg = (
                 "OCR text matches." if ocr_match else
-                f"""OCR text differs.\nBaseline: '{base_txt}'\nCurrent : '{curr_txt}'"""
+                f"""OCR text differs.
+Baseline: '{base_txt}'
+Current : '{curr_txt}'"""
             )
         except (TesseractNotFoundError, FileNotFoundError) as e:
             ocr_match = False
@@ -379,23 +381,42 @@ async def browser(request):
             viewport={"width": 1280, "height": 900},
         )
 
-        # NEW ✨: Avoid Playwright waiting on webfonts for screenshots by overriding FontFaceSet.ready early
-        # This prevents "waiting for fonts to load..." stalls during page/locator.screenshot
+        # NEW ✨: Override FontFaceSet across ALL frames (including iframes) *before* any page scripts run
         await context.add_init_script(
             """
             (() => {
-              try {
-                const proto = (window.FontFaceSet && window.FontFaceSet.prototype) || null;
-                if (proto) {
-                  Object.defineProperty(proto, 'ready', { get() { return Promise.resolve(this); } });
-                }
-              } catch (e) { /* ignore */ }
+              function patch(win){
+                try{
+                  const FFS = win.FontFaceSet && win.FontFaceSet.prototype;
+                  if(FFS){
+                    try{ Object.defineProperty(FFS, 'ready', { get(){ return Promise.resolve(this); } }); }catch(e){}
+                    try{ FFS.load = async function(){ return []; }; }catch(e){}
+                  }
+                }catch(_){ }
+              }
+              patch(window);
+              // Some pages create/attach iframes dynamically; hook to patch them too
+              try{
+                const mo = new MutationObserver((muts)=>{
+                  for(const m of muts){
+                    for(const n of m.addedNodes){
+                      if(n && n.tagName === 'IFRAME' && n.contentWindow){
+                        try{ patch(n.contentWindow); }catch(e){}
+                      }
+                    }
+                  }
+                });
+                mo.observe(document, {childList:true, subtree:true});
+              }catch(_){ }
             })();
             """
-        )  # ⟵ NEW
+        )  # ⟵ NEW (stronger)
 
-        # NEW (optional): disable webfont requests entirely to speed up & avoid font-load hangs
-        if (os.getenv("DISABLE_WEBFONTS", "1").lower() in {"1", "true", "yes"}):  # ⟵ NEW
+        # NEW: Block *font* resource_type everywhere (covers no-extension font URLs too)
+        await context.route("**/*", lambda route: route.abort() if route.request.resource_type == 'font' else route.continue_())  # ⟵ NEW
+
+        # (kept) optional global switch via env to also block font file extensions from odd CDNs
+        if os.getenv("BLOCK_FONT_EXT", "1").lower() in {"1", "true", "yes"}:  # ⟵ NEW
             await context.route("**/*.{woff,woff2,ttf,otf}", lambda route: route.abort())  # ⟵ NEW
 
         context.set_default_timeout(45000)
@@ -455,8 +476,29 @@ async def test_gocu_hero_ocr_ci(
 
     page = await browser.new_page()
 
-    # EXTRA: force system fonts to avoid late-loading webfonts changing layout  ⟵ NEW (defensive)
-    await page.add_style_tag(content="*{font-family: Arial, Helvetica, sans-serif !important}")  # ⟵ NEW
+    # EXTRA: also inject patches on this page specifically (defense-in-depth)  ⟵ NEW
+    await page.add_init_script(
+        """
+        (() => {
+          try{
+            const FFS = window.FontFaceSet && window.FontFaceSet.prototype;
+            if(FFS){
+              try{ Object.defineProperty(FFS, 'ready', { get(){ return Promise.resolve(this); } }); }catch(e){}
+              try{ FFS.load = async function(){ return []; }; }catch(e){}
+            }
+          }catch(_){ }
+        })();
+        """
+    )  # ⟵ NEW
+
+    # EXTRA: force system fonts (prevents layout shift even with fonts blocked)
+    await page.add_style_tag(content="*{font-family: Arial, Helvetica, sans-serif !important}")  # ⟵ CHANGED
+
+    # Reduce motion globally to limit any animation work during screenshots  ⟵ NEW
+    try:
+        await page.emulate_media(reduced_motion='reduce')  # ⟵ NEW
+    except Exception:
+        pass
 
     specific_js_files = [
         'finalytics.js',
@@ -481,8 +523,7 @@ async def test_gocu_hero_ocr_ci(
                     print(error_message)
                     error_tracker.append(error_message)
                     screenshot_path = screenshots_directory / f"js_error_{client}.png"
-                    # IMPORTANT: don't let this screenshot hang on fonts either  ⟵ NEW
-                    await page.screenshot(path=str(screenshot_path), animations='disabled', timeout=15000)  # ⟵ NEW
+                    await page.screenshot(path=str(screenshot_path), animations='disabled', timeout=15000)  # keep fast  ⟵ CHANGED
                     print(f"Screenshot of JS error saved at {screenshot_path} for client {client}")
             except Exception as e:
                 print(f"Console handler failed: {e}")
@@ -505,8 +546,8 @@ async def test_gocu_hero_ocr_ci(
             max_wait=12000,
         )
 
-        # Avoid font stalls for full-page screenshots  ⟵ NEW
-        await page.screenshot(path=str(current_dir / 'homepage_screenshot.png'), full_page=True, animations='disabled', timeout=20000)  # ⟵ CHANGED
+        # Full-page screenshot with animations disabled, *and* fonts blocked/patched  ⟵ CHANGED
+        await page.screenshot(path=str(current_dir / 'homepage_screenshot.png'), full_page=True, animations='disabled', timeout=20000)
         await save_page_source(page, current_dir / 'homepage_source.html')
 
         print(f"Going to test_scenario_url {test_scenario_url}...")
@@ -560,20 +601,17 @@ async def test_gocu_hero_ocr_ci(
         HERO_SEL = "#main .hero"  # ⟵ FIXED: definitive selector for gocu
 
         hero_loc = page.locator(HERO_SEL).first
-        # Attach-only wait avoids visibility flakiness  ⟵ NEW
         try:
             await hero_loc.wait_for(state="attached", timeout=10000)
             print("[HERO] Attached.")
         except PlaywrightTimeoutError:
             print("[HERO] Not attached in 10s; proceeding with JS bbox fallback.")
 
-        # Force visible + scroll into view regardless of computed styles  ⟵ NEW
         await page.evaluate(
             "sel => { const el=document.querySelector(sel); if(el){ el.style.visibility='visible'; el.style.opacity='1'; el.scrollIntoView({block:'start'}); } }",
             HERO_SEL,
         )
 
-        # Get bbox via JS (works even if Locator can't compute bbox yet)  ⟵ NEW
         bbox = await page.evaluate(
             """
             (sel) => {
@@ -597,18 +635,17 @@ async def test_gocu_hero_ocr_ci(
 
         current_hero_path = current_dir / 'hero_ad_only.png'
 
-        # Prefer Locator screenshot if attached; else use page.clip  ⟵ NEW
         try:
             if await hero_loc.count() > 0:
-                await hero_loc.screenshot(path=str(current_hero_path), animations='disabled', timeout=20000)  # ⟵ CHANGED
+                await hero_loc.screenshot(path=str(current_hero_path), animations='disabled', timeout=20000)
             else:
                 raise Exception("hero locator not found; using page.clip")
         except Exception:
             await page.screenshot(
                 path=str(current_hero_path),
                 clip={"x": max(0, bbox['x']), "y": max(0, bbox['y']), "width": bbox['width'], "height": bbox['height']},
-                animations='disabled',  # ⟵ CHANGED
-                timeout=20000,          # ⟵ CHANGED
+                animations='disabled',
+                timeout=20000,
             )
         print("Saved hero section screenshot as hero_ad_only.png")
 
