@@ -1,7 +1,7 @@
 # Test Automation Project – README
 
 ## Overview
-This project contains automated end-to-end tests written in Python using pytest and Playwright. The tests are located in the `tests/` folder and are designed to validate core site functionality for different scenarios (e.g., core product ads, multiproduct hero ads, cards) and checks for errors (Javacript only for finalytics related javascript files and missing finalytics tags). The tests that are locatined in the 'tests/ADMINSITETESTS' are tests that cannot be executed in groups and can only be executed one at a time since it uses 2FA authentication.
+This project contains automated end-to-end tests written in Python using pytest and Playwright. The tests are located in the `tests/` folder and are designed to validate core site functionality for different scenarios (e.g., core product ads, multiproduct hero ads, cards) and checks for errors (Javacript errors but only for finalytics related javascript files and missing finalytics tags). The tests that are in the 'tests/ADMINSITETESTS' are tests that cannot be executed in groups and can only be executed one at a time since it uses 2FA authentication.
 
 ## Setup
 1. Clone the repository and navigate to the root folder.
