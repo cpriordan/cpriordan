@@ -23,10 +23,19 @@ Tests follow the pattern: `test_[client]_[feature]_[environment]_[details].py`
 
 ## Commands
 
+### Virtual Environment
+
+The project virtual environment is located at: `~/projects/testenv`
+
+```bash
+# Activate the virtual environment
+source ~/projects/testenv/bin/activate
+```
+
 ### Running Tests
 
 ```bash
-# Install dependencies
+# Install dependencies (if not already installed)
 pip install -r requirements.txt
 playwright install --with-deps
 
@@ -122,3 +131,47 @@ Workflow patterns:
 - Screenshot directories are cleared before each test run to manage disk space
 - Admin tests use TOTP-based 2FA requiring accurate time sync
 - OCR tests compare visual output against baseline images
+
+## Serana MCP Integration
+
+This project is configured with [Serana MCP (Model Context Protocol)](https://github.com/oraios/serena) for enhanced code understanding and AI-assisted development. Serana provides semantic code analysis and context-aware assistance.
+
+### Serana Configuration Files
+
+- **serena_config.yml**: Main server configuration with security settings and language servers
+- **.serena/project.yml**: Project-specific settings for test automation context
+- **start_serena.sh**: Quick start script for the MCP server
+- **launch_serena.py**: Management utility for diagnostics and configuration
+
+### Using Serana
+
+```bash
+# Run diagnostics to check installation
+python3 launch_serena.py diagnostics
+
+# View project information
+python3 launch_serena.py info
+
+# Start server (for SSE transport)
+./start_serena.sh sse
+
+# For Claude Code integration (stdio transport)
+./start_serena.sh
+```
+
+### Security Configuration
+
+Serana is configured to block access to sensitive files:
+- `.env` files with credentials
+- Any files containing passwords, secrets, or API keys
+- Test environment variables with authentication data
+
+### Language Server Support
+
+For optimal code analysis, install the Python language server:
+```bash
+source ~/projects/testenv/bin/activate
+pip install python-lsp-server
+```
+
+This enables better code completion, navigation, and refactoring suggestions when working with the test suite.

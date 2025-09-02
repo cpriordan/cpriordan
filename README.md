@@ -123,4 +123,10 @@ The script deletes all existing screenshot folders starting with `screenshots_on
 clear_old_screenshot_directories("PROD", "oneaz")
 ```
 
+---
+
+## Testing Resources
+
+**Shared Testing Video:** [View on SharePoint](https://extractablellc.sharepoint.com/:v:/s/Finalyticsai/ESPyk0UJxpxKvMw6zN8SPlMBOHutoXk5PZS-73MSSMdToQ?e=Hy5Eh2)
+
 

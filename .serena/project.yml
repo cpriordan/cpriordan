@@ -1,0 +1,124 @@
+# Project-specific Serena configuration for Fintests
+# This configuration is specific to the Playwright test automation suite
+
+# Project metadata
+name: "fintests-playwright-automation"
+description: "Playwright-based test automation suite for Finalytics credit union websites and admin portal"
+version: "1.0.0"
+
+# Project structure and important directories
+structure:
+  source_dirs:
+    - "fin-tests/"
+    - "pytests/"
+    - "fin-admin-tests/"
+  test_dirs:
+    - "fin-tests/PROD/"
+    - "fin-tests/QA/"
+    - "pytests/ADMINSITETESTS/"
+  config_files:
+    - "requirements.txt"
+    - "CLAUDE.md"
+    - "README_Test_Automation.md"
+    - ".github/workflows/"
+  
+# Testing framework settings
+framework:
+  type: "playwright-pytest"
+  test_runner: "pytest"
+  browser_automation: "playwright"
+  
+# Test categories
+test_categories:
+  ui_tests:
+    - "Tag validation tests"
+    - "JavaScript error detection"
+    - "Ad content validation"
+    - "OCR visual validation"
+  admin_tests:
+    - "2FA login flows"
+    - "Campaign management"
+    - "Content segmentation"
+    - "Media library operations"
+  
+# Key test patterns and files
+important_files:
+  tag_tests:
+    - "fin-tests/**/test_*_tags_*.py"
+    - "fin-tests/**/test_*_stgtags_*.py"
+  js_error_tests:
+    - "fin-tests/**/test_*_js_errors*.py"
+  ocr_tests:
+    - "fin-tests/**/test_*_ocr_*.py"
+  admin_tests:
+    - "pytests/ADMINSITETESTS/test_findata_*.py"
+  workflows:
+    - ".github/workflows/*.yml"
+    
+# Code analysis preferences
+analysis:
+  # Focus areas for semantic understanding
+  focus_areas:
+    - "browser_automation"
+    - "async_testing"
+    - "screenshot_capture"
+    - "error_detection"
+    - "2FA_authentication"
+    - "visual_validation"
+  
+  # Important patterns to recognize
+  patterns:
+    - "Playwright page interactions"
+    - "pytest fixtures and marks"
+    - "async/await patterns"
+    - "Screenshot management"
+    - "Console error monitoring"
+    - "TOTP authentication"
+    
+# Security and sensitivity
+sensitive_patterns:
+  - "FINDATA_.*_USER"
+  - "FINDATA_.*_PW"
+  - "FINDATA_.*_OTP"
+  - "TEST_ENVIRONMENT"
+  - "credentials"
+  - "password"
+  - "secret"
+  
+# Project conventions
+conventions:
+  # Test naming patterns
+  test_files:
+    - "test_[client]_[feature]_[environment]_[details].py"
+    - "test_findata_[env]_[account]_[feature].py"
+  
+  # Directory structure
+  directories:
+    - "PROD/ for production tests"
+    - "QA/ for QA environment tests"
+    - "ADMINSITETESTS/ for admin portal tests"
+    
+  # Screenshot patterns
+  screenshots:
+    - "screenshots_[client]_[timestamp]/"
+    - "Auto-cleanup before test runs"
+
+# Development workflow
+workflow:
+  test_command: "pytest"
+  test_specific: "pytest -k test_name"
+  test_verbose: "pytest -v -s"
+  install_deps: "pip install -r requirements.txt && playwright install --with-deps"
+  activate_venv: "source ~/projects/testenv/bin/activate"
+  
+# Integration preferences
+mcp:
+  context: "ide-assistant"
+  capabilities:
+    - "test_analysis"
+    - "test_creation"
+    - "file_editing"
+    - "search_and_navigation"
+    - "refactoring_suggestions"
+    - "pattern_recognition"
+    - "test_debugging"
