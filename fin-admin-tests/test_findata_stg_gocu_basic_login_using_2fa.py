@@ -1,28 +1,12 @@
 
 import os
-import shutil
 import time
 
 import pytest
-from playwright.sync_api import sync_playwright, expect
+from playwright.sync_api import expect
 from pyotp import TOTP
 from dotenv import load_dotenv
-
-def clear_screenshots_directory(directory):
-    if os.path.exists(directory):
-        # Remove all files in the directory
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)  # Remove file or symbolic link
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)  # Remove directory
-            except Exception as e:
-                print(f"Failed to delete {file_path}. Reason: {e}")
-    else:
-        # Create the directory if it doesn't exist
-        os.makedirs(directory)
+from qa_tools import browser_context, clear_screenshots_directory
 
 # Load environment variables from .env
 load_dotenv()
@@ -38,16 +22,6 @@ if not findata_user or not findata_pw or not findata_otp:
 
 # Configure TOTP using pyotp
 totp = TOTP(findata_otp, interval=30, digits=6, digest="sha1")
-
-@pytest.fixture(scope="function")
-def browser_context():
-    """Fixture to set up and tear down the Playwright browser context."""
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=False)
-        context = browser.new_context()
-        yield context
-        context.close()
-        browser.close()
 
 def test_findata_login_using_2fa(browser_context):
     page = browser_context.new_page()

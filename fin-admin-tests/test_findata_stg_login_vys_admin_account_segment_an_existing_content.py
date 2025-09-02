@@ -1,11 +1,11 @@
 import os
-import shutil
 import pytest
 import re
 import time
-from playwright.sync_api import sync_playwright, expect
+from playwright.sync_api import expect
 from pyotp import TOTP
 from dotenv import load_dotenv
+from qa_tools import browser_context, clear_screenshots_directory, validate_no_server_error
 
 class LoginPage:
     def __init__(self, page):
@@ -334,19 +334,6 @@ class ScenarioSetupCompletePage:
         return True
 
 
-def clear_screenshots_directory(directory):
-    if os.path.exists(directory):
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-            except Exception as e:
-                print(f"Failed to delete {file_path}. Reason: {e}")
-    else:
-        os.makedirs(directory)
 
 def check_url_pattern(page, base_url, param_patterns):
     """
@@ -389,16 +376,8 @@ if not findata_user or not findata_pw or not findata_otp or not test_env:
 # Configure TOTP using pyotp
 totp = TOTP(findata_otp, interval=30, digits=6, digest="sha1")
 
-@pytest.fixture(scope="function")
-def browser_context():
-    """Fixture to set up and tear down the Playwright browser context."""
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=False)
-        # Pass HTTP credentials directly while creating the new context
-        context = browser.new_context(http_credentials={"username": "trustonestage", "password": "TruStone2024!!"})
-        yield context
-        context.close()
-        browser.close()
+# HTTP credentials are now configured via environment variables in qa_tools.py
+# Set HTTP_USERNAME=trustonestage and HTTP_PASSWORD=TruStone2024!! in your environment
 def generate_otp_code():
     import time
     remaining_time = totp.interval - (int(time.time()) % totp.interval)
@@ -408,18 +387,6 @@ def generate_otp_code():
         time.sleep(remaining_time + 1)
     return totp.now()
 
-def validate_no_server_error(page):
-    """
-    Validates that the page does not contain server error messages.
-
-    Args:
-        page: The Playwright page object.
-    """
-    error_keywords = ["Server Error", "(500)", "error", "Page not found"]
-    page_text = page.text_content("body")
-    found_errors = [msg for msg in error_keywords if msg in page_text]
-
-    assert not found_errors, "Error messages found on the page: " + ", ".join(found_errors)
 
 def test_segment_an_existing_content(browser_context):
     # Define the base URL and parameter patterns
