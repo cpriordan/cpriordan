@@ -7,3 +7,5 @@ python-dotenv
 pillow
 opencv-python
 pytesseract
+aiohttp
+colorama
