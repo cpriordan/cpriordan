@@ -1,76 +1,24 @@
-import asyncio
 import pytest
 import pytest_asyncio
 import sys
 import os
 import time
-import shutil
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
-# Function to clear the directory before saving new screenshots
-def clear_screenshots_directory(directory):
-    if os.path.exists(directory):
-        # Remove all files in the directory
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)  # Remove file or symbolic link
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)  # Remove directory
-            except Exception as e:
-                print(f"Failed to delete {file_path}. Reason: {e}")
-    else:
-        # Create the directory if it doesn't exist
-        os.makedirs(directory)
+# Add parent directory to path for qa_tools import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-async def save_page_source(page, filepath):
-    """Saves the page's source code to a file."""
-    try:
-        html_content = await page.content()
-        with open(filepath, 'w', encoding='utf-8') as file:
-            file.write(html_content)
-        print(f"Page source saved to {filepath}")
-    except Exception as e:
-        print(f"Failed to save page source: {e}")
-
-def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker):
-    """
-    Listens for console messages to detect JavaScript errors from specific files.
-    Updates the error_tracker with detected errors.
-    """
-    async def handle_console_message(msg):
-        location = msg.location
-        file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
-
-        # Check if the message is an error and from a specific JS file
-        if msg.type == 'error' and file_name in specific_files and file_name.endswith('.js'):
-            error_message = f"JS Error found in {file_name}: {msg.text} for client {client}"
-            print(error_message)
-
-            # Add error message to the tracker
-            error_tracker.append(error_message)
-
-            # Take a screenshot for debugging
-            screenshot_path = os.path.join(os.getcwd(), f"js_error_{client}.png")
-            await page.screenshot(path=screenshot_path)
-            print(f"Screenshot of JS error saved at {screenshot_path}")
-
-    # Listen for console events on the page
-    page.on('console', lambda msg: asyncio.ensure_future(handle_console_message(msg)))
-
-# Fixture to set up Playwright and launch the browser
-@pytest_asyncio.fixture
-async def browser(request):
-    """Fixture to launch the browser with HTTP credentials."""
-    username = request.param.get("username")
-    password = request.param.get("password")
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True, args=["--remote-debugging-port=9222"])
-        context = await browser.new_context(http_credentials={"username": username, "password": password})
-        context.set_default_timeout(40000)
-        yield context
-        await browser.close()
+# Import consolidated functions from qa_tools
+from qa_tools import (
+    clear_screenshots_directory,
+    save_page_source_async,
+    detect_js_errors_from_specific_files_async,
+    wait_for_js_and_element_async,
+    validate_finalytics_tags,
+    setup_screenshots_directory,
+    get_common_js_files,
+    get_common_finalytics_tags,
+    browser)
 
 async def wait_for_js_and_element(page, hero_heading_selector, timeout=40000):
     """
@@ -119,14 +67,13 @@ async def test_uccu_heloc_stgtags_and_js_errors(
 ):
     print(f"Starting {client} hero ad test..")
 
-    screenshots_directory = 'screenshots_' + client + '_using_pytest'
-    clear_screenshots_directory(screenshots_directory)
+    screenshots_directory = setup_screenshots_directory(client)
 
     page = await browser.new_page()
 
-    specific_js_files = ['finalytics.js', 'finalytics-function.js', 'settings_div.js', 'settings.js', 'controlbar.js']
+    specific_js_files = get_common_js_files()
     error_tracker = []
-    detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker)
+    await detect_js_errors_from_specific_files_async(client, page, specific_js_files, error_tracker, screenshots_directory)
 
     try:
         print(f"Going to homepage_url {homepage_url}...")
@@ -154,7 +101,7 @@ async def test_uccu_heloc_stgtags_and_js_errors(
         # time.sleep(20)
         print(f"Waiting for {hero_heading_selector} on the homepage...")
         await page.screenshot(path=f'{screenshots_directory}/homepage_before_selector_screenshot.png')
-        await wait_for_js_and_element(page, hero_heading_selector, timeout=60000)
+        await wait_for_js_and_element_async(page, hero_heading_selector, timeout=60000)
         # Strip any white space in the heading
         ad_on_hero_content_h1 = await page.locator(hero_heading_selector).inner_text()
         ad_on_hero_content_h1_normalized = ad_on_hero_content_h1.replace("\n", " ").strip()
@@ -165,31 +112,20 @@ async def test_uccu_heloc_stgtags_and_js_errors(
 
         await page.screenshot(path=f'{screenshots_directory}/hero_ad1_screenshot.png', timeout=60000)
 
-        # Verify the HTML snippet exists in the page source
+        # Get page content for validation
         html_content = await page.content()
-
-        # Modify to check for different possible tag HTML syntax since it can vary per client
-        desired_cloudfront_urls = (html_finalytics_stg_cloudfront, html_finalytics_stg_cloudfront2)
-
-        if not any(tag in html_content for tag in desired_cloudfront_urls):
-            pytest.fail(
-                f"HTML Finalytics STG cloudfront URL '{html_finalytics_stg_cloudfront2}' NOT FOUND in the page source!"
-            )
-        else:
-            print(f"HTML Finalytics STG cloudfront URL '{html_finalytics_stg_cloudfront2}' exists in the homepage source.")
-
-        # Define JS and CSS tags
-        desired_finalytics_tags = [finalytics_css_tag, finalytics_js_tag, finalytics_function_js_tag,
-                                   finalytics_settings_div_js_tag]
-        # Check that all desired tags are present by looping through all the desired tags to check which ones are not in html_content and saves the ones that are missing
-        missing_desired_finalytics_tags = [tag for tag in desired_finalytics_tags if tag not in html_content]
-
-        if missing_desired_finalytics_tags:
-            pytest.fail(
-                f"The following Finalytics finalytics tags were NOT found in the page source: {', '.join(missing_desired_finalytics_tags)}"
-            )
-        print(
-            f"The following Finalytics finalytics tags were found in the page source: {', '.join(desired_finalytics_tags)}")
+        
+        # Use consolidated function for Finalytics tag validation
+        cloudfront_urls = (html_finalytics_stg_cloudfront, html_finalytics_stg_cloudfront2)
+        common_tags = get_common_finalytics_tags()
+        required_tags = [
+            common_tags['css_tag'],
+            common_tags['js_tag'], 
+            common_tags['function_js_tag'],
+            common_tags['settings_div_js_tag']
+        ]
+        
+        validate_finalytics_tags(html_content, cloudfront_urls, required_tags, client)
 
     except PlaywrightTimeoutError as e:
         pytest.fail(f"Timeout encountered during navigation: {e}")

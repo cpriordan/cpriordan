@@ -1,112 +1,24 @@
-import asyncio
 import pytest
 import pytest_asyncio
 import sys
 import os
 import time
-import shutil
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
-# Function to clear the directory before saving new screenshots
-def clear_screenshots_directory(directory):
-    if os.path.exists(directory):
-        # Remove all files in the directory
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)  # Remove file or symbolic link
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)  # Remove directory
-            except Exception as e:
-                print(f"Failed to delete {file_path}. Reason: {e}")
-    else:
-        # Create the directory if it doesn't exist
-        os.makedirs(directory)
+# Add parent directory to path for qa_tools import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-async def login_if_redirected(page, username, password):
-    login_url = "/util/Login"
-
-    print(f"In login_if_redirected and about to check if login_url {login_url} is in page.url {page.url}")
-    if login_url in page.url:
-        print(f"Redirected to login page and attempting to log in using username {username} and password {password}")
-
-        # Wait for the username and password fields to be available
-        try:
-            await page.wait_for_selector("#UserName", timeout=10000)  # Adjust the timeout as necessary
-            await page.wait_for_selector("#Password", timeout=10000)
-            await page.wait_for_selector("#Submit", timeout=10000)
-        except Exception as e:
-            print(f"Error: Required login fields are not available. {e}")
-            return
-
-        # Enter username and password
-        print(f"About to enter username {username}...")
-        await page.fill("#UserName", username)
-        print(f"About to enter password {password}")
-        await page.fill("#Password", password)
-
-        # Click the submit button
-        await page.click("#Submit")
-
-        # Wait for the page to load and check if login succeeded
-        await page.wait_for_load_state("domcontentloaded", timeout=30000)
-
-        if not (login_url in page.url):
-            print("Logged in successfully.")
-        else:
-            print("Login attempt failed. Still on the login page.")
-    else:
-        print(f"login_url {login_url} is NOT in page.url {page.url} so skip login_if_redirected function")
-
-
-async def save_page_source(page, filepath):
-    """Saves the page's source code to a file."""
-    try:
-        html_content = await page.content()
-        with open(filepath, 'w', encoding='utf-8') as file:
-            file.write(html_content)
-        print(f"Page source saved to {filepath}")
-    except Exception as e:
-        print(f"Failed to save page source: {e}")
-
-def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker):
-    """
-    Listens for console messages to detect JavaScript errors from specific files.
-    Updates the error_tracker with detected errors.
-    """
-    async def handle_console_message(msg):
-        location = msg.location
-        file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
-
-        # Check if the message is an error and from a specific JS file
-        if msg.type == 'error' and file_name in specific_files and file_name.endswith('.js'):
-            error_message = f"JS Error found in {file_name}: {msg.text} for client {client}"
-            print(error_message)
-
-            # Add error message to the tracker
-            error_tracker.append(error_message)
-
-            # Take a screenshot for debugging
-            screenshot_path = os.path.join(os.getcwd(), f"js_error_{client}.png")
-            await page.screenshot(path=screenshot_path)
-            print(f"Screenshot of JS error saved at {screenshot_path}")
-
-    # Listen for console events on the page
-    page.on('console', lambda msg: asyncio.ensure_future(handle_console_message(msg)))
-
-# Fixture to set up Playwright and launch the browser
-@pytest_asyncio.fixture
-async def browser(request):
-    """Fixture to launch the browser with HTTP credentials."""
-    username = request.param.get("username")
-    password = request.param.get("password")
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True, args=["--remote-debugging-port=9222"])
-        context = await browser.new_context(http_credentials={"username": username, "password": password})
-        context.set_default_timeout(40000)
-        yield context
-        await browser.close()
+# Import consolidated functions from qa_tools
+from qa_tools import (
+    clear_screenshots_directory,
+    save_page_source_async,
+    detect_js_errors_from_specific_files_async,
+    wait_for_js_and_element_async,
+    validate_finalytics_tags,
+    setup_screenshots_directory,
+    get_common_js_files,
+    get_common_finalytics_tags,
+    browser)
 
 async def wait_for_js_and_element(page, hero_heading_selector, timeout=40000):
     """
@@ -157,14 +69,13 @@ async def test_global_savings_stgtags_and_js_errors(
 ):
     print(f"Starting {client} hero ad test..")
 
-    screenshots_directory = 'screenshots_' + client + '_using_pytest'
-    clear_screenshots_directory(screenshots_directory)
+    screenshots_directory = setup_screenshots_directory(client)
 
     page = await browser.new_page()
 
-    specific_js_files = ['finalytics.js', 'finalytics-function.js', 'settings_div.js', 'settings.js', 'controlbar.js']
+    specific_js_files = get_common_js_files()
     error_tracker = []
-    detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker)
+    await detect_js_errors_from_specific_files_async(client, page, specific_js_files, error_tracker, screenshots_directory)
 
     try:
         print(f"Going to homepage_url {homepage_url}...")
@@ -197,7 +108,7 @@ async def test_global_savings_stgtags_and_js_errors(
             print(f"Waiting for {hero_heading_selector} on the homepage...")
             await page.screenshot(
                 path=f'{screenshots_directory}/homepage_before_selector_screenshot_retry_{retry_count}.png')
-            await wait_for_js_and_element(page, hero_heading_selector, timeout=60000)
+            await wait_for_js_and_element_async(page, hero_heading_selector, timeout=60000)
             await page.screenshot(path=f'{screenshots_directory}/hero_ad1_screenshot_retry_{retry_count}.png')
 
             ad_heading = await page.locator(hero_heading_selector).inner_text()

@@ -1,228 +1,25 @@
 
-import asyncio
 import pytest
 import pytest_asyncio
 import sys
 import os
-import shutil
 import time
-# from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
-# Function to clear the directory before saving new screenshots
-def clear_screenshots_directory(directory):
-    if os.path.exists(directory):
-        # Remove all files in the directory
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)  # Remove file or symbolic link
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)  # Remove directory
-            except Exception as e:
-                print(f"Failed to delete {file_path}. Reason: {e}")
-    else:
-        # Create the directory if it doesn't exist
-        os.makedirs(directory)
+# Add parent directory to path for qa_tools import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# async def save_page_source(page, filepath):
-#     """Saves the page's source code to a file."""
-#     try:
-#         html_content = await page.content()
-#         with open(filepath, 'w', encoding='utf-8') as file:
-#             file.write(html_content)
-#         print(f"Page source saved to {filepath}")
-#     except Exception as e:
-#         print(f"Failed to save page source: {e}")
-
-def save_page_source(page, filepath):
-    try:
-        html_content = page.content()
-        with open(filepath, 'w', encoding='utf-8') as file:
-            file.write(html_content)
-        print(f"Page source saved to {filepath}")
-    except Exception as e:
-        print(f"Failed to save page source: {e}")
-
-# def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker):
-#     """
-#     Listens for console messages to detect JavaScript errors from specific files.
-#     Updates the error_tracker with detected errors.
-#     """
-#     async def handle_console_message(msg):
-#         location = msg.location
-#         file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
-#
-#         # Check if the message is an error and from a specific JS file
-#         if msg.type == 'error' and file_name in specific_files and file_name.endswith('.js'):
-#             error_message = f"JS Error found in {file_name}: {msg.text} for client {client}"
-#             print(error_message)
-#
-#             # Add error message to the tracker
-#             error_tracker.append(error_message)
-#
-#             # Take a screenshot for debugging
-#             screenshot_path = os.path.join(os.getcwd(), f"js_error_{client}.png")
-#             await page.screenshot(path=screenshot_path)
-#             print(f"Screenshot of JS error saved at {screenshot_path}")
-#
-#     # Listen for console events on the page
-#     page.on('console', lambda msg: asyncio.ensure_future(handle_console_message(msg)))
-#
-
-# UPDATED TO OPEN THE DEV CONSOLE WHEN A JS ERROR IS DETECTED
-# def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker):
-#     """Detect JavaScript errors from specific files."""
-#     opened_dev_console = False  # Initialize the flag here
-#     def handle_console_message(msg):
-#         nonlocal opened_dev_console  # Declare the variable as non-local to access it from the outer scope
-#         location = msg.location
-#         file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
-#
-#         if msg.type == 'error' and file_name in specific_files and file_name.endswith('.js'):
-#             error_message = f"JS Error found in {file_name}: {msg.text} for client {client}"
-#             print(error_message)
-#             error_tracker.append(error_message)
-#
-#             if not opened_dev_console:
-#                 print("Opening DevTools console for debugging...")
-#                 # Open the DevTools console in the current browser instance
-#                 page.context.new_page().goto("devtools://devtools")
-#                 opened_dev_console = True
-#
-#             screenshot_path = os.path.join(os.getcwd(), f"js_error_{client}.png")
-#             page.screenshot(path=screenshot_path)
-#             print(f"Screenshot of JS error saved at {screenshot_path} with dev console opened for client {client}")
-#
-#     page.on('console', handle_console_message)
-
-
-def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker, browser_instance, browser_type):
-    """Detect JavaScript errors from specific files."""
-    def handle_console_message(msg):
-        location = msg.location
-        file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
-        screenshots_directory = f'screenshots_{client}_using_pytest/{browser_type}'
-
-        if msg.type == 'error' and file_name in specific_files and file_name.endswith('.js'):
-            error_message = f"JS Error found in {file_name}: {msg.text} for client {client}"
-            print(error_message)
-            error_tracker.append(error_message)
-
-            screenshot_path = os.path.join(screenshots_directory, f"/js_error_{client}.png")
-            page.screenshot(path=screenshot_path)
-            print(f"Screenshot of JS error saved at {screenshot_path} for client {client}")
-
-    page.on('console', handle_console_message)
-
-# Fixture to set up Playwright and launch ONE browser
-# @pytest_asyncio.fixture
-# async def browser():
-#     async with async_playwright() as p:
-#         browser = await p.chromium.launch()
-#         yield browser  # Use `yield` to ensure teardown after test
-#         await browser.close()  # Close the browser after the test
-
-# Fixture to set up Playwright and launch MULTIPLE browsers
-def wait_for_js_and_element(page, hero_heading_selector, timeout=60000):
-    try:
-        page.evaluate('''new Promise(resolve => {
-            if (document.readyState === 'complete') {
-                resolve();
-            } else {
-                window.addEventListener('load', resolve);
-            }
-        });''')
-        print("Page fully loaded.")
-    except PlaywrightTimeoutError:
-        print("Timeout while waiting for page load.")
-
-    # Wait for the specific element to be visible
-    try:
-        page.wait_for_function(
-            f'document.querySelector("{hero_heading_selector}") !== null && document.querySelector("{hero_heading_selector}").offsetHeight > 0',
-            timeout=timeout
-        )
-        print(f"Element {hero_heading_selector} is visible.")
-    except PlaywrightTimeoutError:
-        print(f"Timeout waiting for element: {hero_heading_selector}")
-
-# UPDATED TO FORCE CACHING AND REMOVE WEBKIT FOR NOW
-# @pytest.fixture(params=["chromium", "firefox", "webkit", "opera", "edge"])
-# @pytest.fixture(params=["chromium"])
-# def browser(request):
-#     with sync_playwright() as p:
-#         browser_type = request.param
-#         browser_args = ["--start-maximized", "--auto-open-devtools-for-tabs"]
-#         if browser_type in ["opera", "edge"]:
-#             # Use Chromium with the custom executable path for Opera or Edge
-#             executable_path = {
-#                 "opera": "C:/Users/c_p_r/AppData/Local/Programs/Opera/opera.exe",  # Update this path
-#                 "edge": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"  # Update this path
-#             }[browser_type]
-#             browser = p.chromium.launch(
-#                 headless=False,  # Run in visible mode
-#                 executable_path=executable_path,
-#                 args=browser_args # Maximize the browser window and OPEN THE DEV CONSOLE
-#             )
-#         else:
-#             # Default browser launch
-#             browser = getattr(p, browser_type).launch(
-#                 headless=False,  # Run in visible mode
-#                 args=browser_args
-#             )
-#         # Create a context with network interception for a desktop
-#         context = browser.new_context(
-#             viewport={"width": 1920, "height": 1080}
-#         )
-#
-#         # Intercept requests and modify headers to force caching for 15 minutes which is more than enough for the quick duraction of the test
-#         context.route("**/*", lambda route: route.continue_(
-#             headers={
-#                 "Cache-Control": "max-age=900"  # Cache for 15 minutes
-#             }
-#         ))
-#
-#         page = context.new_page()
-#
-#         # Ensure Console tab is selected in Chromium-based browsers
-#         if browser_type in ["chromium"]:
-#             devtools_session = context.new_cdp_session(page)
-#             try:
-#                 devtools_session.send("Runtime.enable")
-#                 devtools_session.send("Page.enable")
-#                 devtools_session.send("Runtime.evaluate", {
-#                     "expression": """
-#                         (() => {
-#                             const tab = Array.from(document.querySelectorAll('.tabbed-pane-tab'))
-#                                 .find(el => el.textContent.includes('Console'));
-#                             if (tab) tab.click();
-#                         })();
-#                     """
-#                 })
-#                 print(f"Console tab activated for {browser_type}.")
-#             except Exception as e:
-#                 print(f"Failed to activate Console tab: {e}")
-#
-#         yield browser, browser_type
-#         context.close()
-#         browser.close()
-
-
-
-@pytest_asyncio.fixture
-async def browser(request):
-    """Fixture to launch the browser with HTTP credentials."""
-    username = request.param.get("username")
-    password = request.param.get("password")
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=False, args=["--remote-debugging-port=9222"])
-        context = await browser.new_context(http_credentials={"username": username, "password": password})
-        context.set_default_timeout(40000)
-        yield context
-        await browser.close()
+# Import consolidated functions from qa_tools
+from qa_tools import (
+    clear_screenshots_directory,
+    save_page_source_async,
+    detect_js_errors_from_specific_files_async,
+    wait_for_js_and_element_async,
+    validate_finalytics_tags,
+    setup_screenshots_directory,
+    get_common_js_files,
+    get_common_finalytics_tags,
+    browser)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -280,7 +77,7 @@ async def test_oneaz_stgtags_and_js_errors(
 
         # Save the page source to a file
         page_source_filepath = f'{screenshots_directory}/homepage_source.html'
-        save_page_source(page, page_source_filepath)
+        await save_page_source_async(page, page_source_filepath)
 
         # Open the "View Source" page only if not using webkit since not valid URL format for webkit
         view_source_url = f"view-source:{homepage_url}"

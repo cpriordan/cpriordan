@@ -25,26 +25,7 @@ def clear_screenshots_directory(directory):
         # Create the directory if it doesn't exist
         os.makedirs(directory)
 
-# async def save_page_source(page, filepath):
-#     """Saves the page's source code to a file."""
-#     try:
-#         html_content = await page.content()
-#         with open(filepath, 'w', encoding='utf-8') as file:
-#             file.write(html_content)
-#         print(f"Page source saved to {filepath}")
-#     except Exception as e:
-#         print(f"Failed to save page source: {e}")
-
-def save_page_source(page, filepath):
-    try:
-        html_content = page.content()
-        with open(filepath, 'w', encoding='utf-8') as file:
-            file.write(html_content)
-        print(f"Page source saved to {filepath}")
-    except Exception as e:
-        print(f"Failed to save page source: {e}")
-
-# def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker):
+# # async def detect_js_errors_from_specific_files_async(client, page, specific_files, error_tracker, screenshots_directory):
 #     """
 #     Listens for console messages to detect JavaScript errors from specific files.
 #     Updates the error_tracker with detected errors.
@@ -71,7 +52,7 @@ def save_page_source(page, filepath):
 #
 
 # UPDATED TO OPEN THE DEV CONSOLE WHEN A JS ERROR IS DETECTED
-# def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker):
+# async def detect_js_errors_from_specific_files_async(client, page, specific_files, error_tracker, screenshots_directory):
 #     """Detect JavaScript errors from specific files."""
 #     opened_dev_console = False  # Initialize the flag here
 #     def handle_console_message(msg):
@@ -97,7 +78,7 @@ def save_page_source(page, filepath):
 #     page.on('console', handle_console_message)
 
 
-def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker, browser_instance, browser_type):
+async def detect_js_errors_from_specific_files_async(client, page, specific_files, error_tracker, browser_instance, browser_type, screenshots_directory):
     """Detect JavaScript errors from specific files."""
     def handle_console_message(msg):
         location = msg.location
@@ -233,9 +214,9 @@ def test_oneaz_stgtags_and_js_errors(
     page = context.new_page()
 
     # Include cxbus.min.js in the specific_js_files  to force a JS error on api=stg
-    specific_js_files = ['finalytics.js', 'finalytics-function.js', 'settings_div.js', 'settings.js', 'controlbar.js']
+    specific_js_files = get_common_js_files()
     error_tracker = []
-    detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker, browser_instance, browser_type)
+    detect_js_errors_from_specific_files_sync(client, page, specific_js_files, error_tracker, browser_instance, browser_type)
 
     print(f"About to go to home_url {homepage_url}")
 
@@ -250,7 +231,10 @@ def test_oneaz_stgtags_and_js_errors(
 
         # Save the page source to a file
         page_source_filepath = f'{screenshots_directory}/homepage_source.html'
-        save_page_source(page, page_source_filepath)
+        html_content = page.content()
+        with open(page_source_filepath, 'w', encoding='utf-8') as file:
+            file.write(html_content)
+        print(f"Page source saved to {page_source_filepath}")
 
         # Open the "View Source" page only if not using webkit since not valid URL format for webkit
         view_source_url = f"view-source:{homepage_url}"
@@ -263,7 +247,7 @@ def test_oneaz_stgtags_and_js_errors(
             print("Screenshot with source code NOT taken for webkit browser engine used by Safari.")
 
         # Call detect_js_errors_from_specific_files after navigating to the homepage
-        detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker, browser_instance, browser_type)
+        detect_js_errors_from_specific_files_sync(client, page, specific_js_files, error_tracker, browser_instance, browser_type)
 
         print(f"Going to test_scenario_url {test_scenario_url}...")
         page.goto(test_scenario_url, timeout=60000)
@@ -274,7 +258,7 @@ def test_oneaz_stgtags_and_js_errors(
         page.screenshot(path=f'{screenshots_directory}/product_page_for_ad_screenshot.png', full_page=True)
 
         # Call detect_js_errors_from_specific_files after navigating to the test scenario
-        detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker, browser_instance, browser_type)
+        detect_js_errors_from_specific_files_sync(client, page, specific_js_files, error_tracker, browser_instance, browser_type)
 
         print(f"Returning to homepage_url {homepage_url} to view the ad...")
         page.goto(homepage_url, timeout=60000)
@@ -294,7 +278,7 @@ def test_oneaz_stgtags_and_js_errors(
             print(f"Ad heading '{ad_heading}' matches expected heading '{expected_heading}'")
 
         # Call detect_js_errors_from_specific_files after going back to the homepage to view the ad
-        detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker, browser_instance, browser_type)
+        detect_js_errors_from_specific_files_sync(client, page, specific_js_files, error_tracker, browser_instance, browser_type)
 
         # Verify the HTML snippet exists in the page source
         html_content = page.content()
