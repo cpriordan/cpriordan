@@ -31,8 +31,8 @@ class LoginPage:
         self.page.wait_for_selector('#id_token-otp_token', timeout=60000)  # Wait up to 60 seconds
         self.page.wait_for_timeout(300)
         otp_input.wait_for(state="visible", timeout=30000) # Ensure the token input field is visible
-        # Generate OTP code using the auth handler
-        otp_code = qa_generate_otp_code(auth_handler)
+        # Generate OTP code using the totp instance
+        otp_code = qa_generate_otp_code(totp)
         otp_input.fill(otp_code)
         self.page.wait_for_timeout(300)
         print(f"OTP code {otp_code} entered.")
@@ -361,15 +361,15 @@ def check_url_pattern(page, base_url, param_patterns):
     return True
 
 # Setup environment variables and authentication
-findata_user, findata_pw, findata_otp, test_env, auth_handler = setup_environment_variables(
+findata_user, findata_pw, findata_otp, test_env, totp = setup_environment_variables(
     "FINDATA_VYS_USER", "FINDATA_VYS_PW", "FINDATA_VYS_OTP"
 )
 
 # HTTP credentials are now configured via environment variables in qa_tools.py
 # Set HTTP_USERNAME=trustonestage and HTTP_PASSWORD=TruStone2024!! in your environment
 def generate_otp_code():
-    """Use the qa_tools generate_otp_code with auth_handler."""
-    return qa_generate_otp_code(auth_handler)
+    """Use the qa_tools generate_otp_code with totp."""
+    return qa_generate_otp_code(totp)
 
 
 def test_segment_an_existing_content(browser_context):

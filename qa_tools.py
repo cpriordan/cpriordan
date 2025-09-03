@@ -7,27 +7,6 @@ from pyotp import TOTP
 from dotenv import load_dotenv
 
 
-class PhoneAuthHandler:
-    """Handler for phone-based 2FA authentication."""
-    
-    def __init__(self, static_code=None):
-        """
-        Initialize phone auth handler.
-        
-        Args:
-            static_code: Optional static code for phone auth. If None, will need manual entry.
-        """
-        self.static_code = static_code
-        self.interval = 30  # Compatibility with TOTP interface
-    
-    def now(self):
-        """Return the static code or prompt for manual entry."""
-        if self.static_code:
-            return self.static_code
-        else:
-            # In automated tests, this would typically be set via environment variable
-            # For manual testing, you could implement input() here
-            raise ValueError("Phone auth code not provided. Set it via environment variable.")
 
 
 def clear_screenshots_directory(directory):
@@ -150,37 +129,21 @@ def check_link_on_page(page, link_text, link_href=None):
     return link.count() > 0
 
 
-def generate_otp_code(auth_handler):
-    """Generate OTP code with timing validation.
-    
-    Args:
-        auth_handler: Either a TOTP instance or PhoneAuthHandler
-    
-    Returns:
-        str: The authentication code
-    """
-    # For TOTP, handle timing to avoid code expiration
-    if isinstance(auth_handler, TOTP):
-        remaining_time = auth_handler.interval - (int(time.time()) % auth_handler.interval)
-        if remaining_time < 5:
-            # Short pause so the token rolls over
-            time.sleep(remaining_time + 1)
-    # For both TOTP and PhoneAuthHandler, call now() to get the code
-    return auth_handler.now()
+def generate_otp_code(totp_instance):
+    """Generate OTP code with timing validation."""
+    remaining_time = totp_instance.interval - (int(time.time()) % totp_instance.interval)
+    if remaining_time < 5:
+        # Short pause so the token rolls over
+        time.sleep(remaining_time + 1)
+    return totp_instance.now()
 
 
-def setup_environment_variables(user_key, pw_key, otp_key, auth_method="totp"):
+def setup_environment_variables(user_key, pw_key, otp_key):
     """
     Load and validate environment variables for authentication.
     
-    Args:
-        user_key: Environment variable key for username
-        pw_key: Environment variable key for password
-        otp_key: Environment variable key for OTP secret or phone code
-        auth_method: Authentication method - "totp" or "phone" (default: "totp")
-    
     Returns:
-        tuple: (findata_user, findata_pw, findata_otp, test_env, auth_handler)
+        tuple: (findata_user, findata_pw, findata_otp, test_env, totp)
     """
     load_dotenv()
     
@@ -188,23 +151,12 @@ def setup_environment_variables(user_key, pw_key, otp_key, auth_method="totp"):
     findata_pw = os.environ.get(pw_key)
     findata_otp = os.environ.get(otp_key)
     test_env = os.environ.get("TEST_ENVIRONMENT")
-    auth_method_env = os.environ.get("AUTH_METHOD", auth_method).lower()
     
-    if not findata_user or not findata_pw or not test_env:
-        raise ValueError(f"Required environment variables {user_key}, {pw_key}, or TEST_ENVIRONMENT are not set!")
+    if not findata_user or not findata_pw or not findata_otp or not test_env:
+        raise ValueError(f"Required environment variables {user_key}, {pw_key}, {otp_key}, or TEST_ENVIRONMENT are not set!")
     
-    # Create appropriate auth handler based on method
-    if auth_method_env == "totp":
-        if not findata_otp:
-            raise ValueError(f"TOTP secret ({otp_key}) is required for TOTP authentication!")
-        auth_handler = TOTP(findata_otp, interval=30, digits=6, digest="sha1")
-    elif auth_method_env == "phone":
-        # For phone auth, findata_otp might contain a static code or be None if manual entry is needed
-        auth_handler = PhoneAuthHandler(findata_otp)
-    else:
-        raise ValueError(f"Unsupported auth method: {auth_method_env}. Use 'totp' or 'phone'")
-    
-    return findata_user, findata_pw, findata_otp, test_env, auth_handler
+    totp = TOTP(findata_otp, interval=30, digits=6, digest="sha1")
+    return findata_user, findata_pw, findata_otp, test_env, totp
 
 
 class LoginPage:
@@ -225,45 +177,26 @@ class LoginPage:
         self.page.get_by_role("button", name="Login").click()
         self.page.wait_for_load_state("networkidle")
 
-    def enter_2fa_code(self, auth_handler):
-        """Enter 2FA code - supports both TOTP and phone authentication."""
+    def enter_2fa_code(self, totp_instance):
         otp_input = self.page.locator('#id_token-otp_token')
         self.page.wait_for_selector('#id_token-otp_token', timeout=60000)
         self.page.wait_for_timeout(300)
         otp_input.wait_for(state="visible", timeout=30000)
         
-        # Generate auth code using the unified function
-        otp_code = generate_otp_code(auth_handler)
-        
-        # Determine auth type for logging
-        if isinstance(auth_handler, TOTP):
-            auth_type = "TOTP"
-        elif isinstance(auth_handler, PhoneAuthHandler):
-            auth_type = "Phone"
-        else:
-            auth_type = "Auth"
-        
+        # Generate fresh OTP code with timing validation
+        otp_code = generate_otp_code(totp_instance)
         otp_input.fill(otp_code)
         self.page.wait_for_timeout(300)
-        print(f"{auth_type} code {otp_code} entered.")
+        print(f"OTP code {otp_code} entered.")
         return otp_code
 
-    def retry_login_with_new_token(self, auth_handler, test_env):
-        """Retry login with fresh auth tokens if needed."""
+    def retry_login_with_new_token(self, totp_instance, test_env):
+        """Retry login with fresh OTP tokens if needed."""
         for attempt in range(2):
             try:
-                # Use unified generate_otp_code for all auth types
-                otp_code = generate_otp_code(auth_handler)
-                
-                # Log based on auth type
-                if isinstance(auth_handler, TOTP):
-                    print(f"Attempt {attempt + 1}: Entering TOTP code {otp_code}.")
-                elif isinstance(auth_handler, PhoneAuthHandler):
-                    print(f"Attempt {attempt + 1}: Using phone code {otp_code}.")
-                else:
-                    print(f"Attempt {attempt + 1}: Entering auth code {otp_code}.")
-                
-                self.enter_2fa_code(auth_handler)
+                otp_code = generate_otp_code(totp_instance)
+                print(f"Attempt {attempt + 1}: Entering OTP code {otp_code}.")
+                self.enter_2fa_code(totp_instance)
                 # Check if login was successful by verifying the URL
                 if f'https://{test_env}finalyticsdata.com/admin/' in self.page.url:
                     print("Login successful.")
