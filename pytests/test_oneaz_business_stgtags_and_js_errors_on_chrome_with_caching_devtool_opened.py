@@ -9,160 +9,17 @@ import time
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
-# Function to clear the directory before saving new screenshots
-def clear_screenshots_directory(directory):
-    if os.path.exists(directory):
-        # Remove all files in the directory
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)  # Remove file or symbolic link
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)  # Remove directory
-            except Exception as e:
-                print(f"Failed to delete {file_path}. Reason: {e}")
-    else:
-        # Create the directory if it doesn't exist
-        os.makedirs(directory)
+# Add parent directory to path for qa_tools import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# async def save_page_source(page, filepath):
-#     """Saves the page's source code to a file."""
-#     try:
-#         html_content = await page.content()
-#         with open(filepath, 'w', encoding='utf-8') as file:
-#             file.write(html_content)
-#         print(f"Page source saved to {filepath}")
-#     except Exception as e:
-#         print(f"Failed to save page source: {e}")
-
-def save_page_source(page, filepath):
-    try:
-        html_content = page.content()
-        with open(filepath, 'w', encoding='utf-8') as file:
-            file.write(html_content)
-        print(f"Page source saved to {filepath}")
-    except Exception as e:
-        print(f"Failed to save page source: {e}")
-
-# def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker):
-#     """
-#     Listens for console messages to detect JavaScript errors from specific files.
-#     Updates the error_tracker with detected errors.
-#     """
-#     async def handle_console_message(msg):
-#         location = msg.location
-#         file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
-#
-#         # Check if the message is an error and from a specific JS file
-#         if msg.type == 'error' and file_name in specific_files and file_name.endswith('.js'):
-#             error_message = f"JS Error found in {file_name}: {msg.text} for client {client}"
-#             print(error_message)
-#
-#             # Add error message to the tracker
-#             error_tracker.append(error_message)
-#
-#             # Take a screenshot for debugging
-#             screenshot_path = os.path.join(os.getcwd(), f"js_error_{client}.png")
-#             await page.screenshot(path=screenshot_path)
-#             print(f"Screenshot of JS error saved at {screenshot_path}")
-#
-#     # Listen for console events on the page
-#     page.on('console', lambda msg: asyncio.ensure_future(handle_console_message(msg)))
-#
-
-# UPDATED TO OPEN THE DEV CONSOLE WHEN A JS ERROR IS DETECTED
-# def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker):
-#     """Detect JavaScript errors from specific files."""
-#     opened_dev_console = False  # Initialize the flag here
-#     def handle_console_message(msg):
-#         nonlocal opened_dev_console  # Declare the variable as non-local to access it from the outer scope
-#         location = msg.location
-#         file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
-#
-#         if msg.type == 'error' and file_name in specific_files and file_name.endswith('.js'):
-#             error_message = f"JS Error found in {file_name}: {msg.text} for client {client}"
-#             print(error_message)
-#             error_tracker.append(error_message)
-#
-#             if not opened_dev_console:
-#                 print("Opening DevTools console for debugging...")
-#                 # Open the DevTools console in the current browser instance
-#                 page.context.new_page().goto("devtools://devtools")
-#                 opened_dev_console = True
-#
-#             screenshot_path = os.path.join(os.getcwd(), f"js_error_{client}.png")
-#             page.screenshot(path=screenshot_path)
-#             print(f"Screenshot of JS error saved at {screenshot_path} with dev console opened for client {client}")
-#
-#     page.on('console', handle_console_message)
-
-def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker, browser_instance, browser_type):
-    """Detect JavaScript errors from specific files."""
-    def handle_console_message(msg):
-        location = msg.location
-        file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
-        screenshots_directory = f'screenshots_{client}_using_pytest/{browser_type}'
-
-        if msg.type == 'error' and file_name in specific_files and file_name.endswith('.js'):
-            error_message = f"JS Error found in {file_name}: {msg.text} for client {client}"
-            print(error_message)
-            error_tracker.append(error_message)
-
-            screenshot_path = os.path.join(screenshots_directory, f"/js_error_{client}.png")
-            page.screenshot(path=screenshot_path)
-            print(f"Screenshot of JS error saved at {screenshot_path} for client {client}")
-
-    page.on('console', handle_console_message)
-
-# Fixture to set up Playwright and launch ONE browser
-# @pytest_asyncio.fixture
-# async def browser():
-#     async with async_playwright() as p:
-#         browser = await p.chromium.launch()
-#         yield browser  # Use `yield` to ensure teardown after test
-#         await browser.close()  # Close the browser after the test
-
-# Fixture to set up Playwright and launch MULTIPLE browsers
-# def wait_for_js_and_element(page, hero_heading_selector, timeout=60000):
-#     try:
-#         page.evaluate('''new Promise(resolve => {
-#             if (document.readyState === 'complete') {
-#                 resolve();
-#             } else {
-#                 window.addEventListener('load', resolve);
-#             }
-#         });''')
-#         print("Page fully loaded.")
-#     except PlaywrightTimeoutError:
-#         print("Timeout while waiting for page load.")
-#
-#     # Wait for the specific element to be visible
-#     try:
-#         page.wait_for_function(
-#             f'document.querySelector("{hero_heading_selector}") !== null && document.querySelector("{hero_heading_selector}").offsetHeight > 0',
-#             timeout=timeout
-#         )
-#         print(f"Element {hero_heading_selector} is visible.")
-#     except PlaywrightTimeoutError:
-#         print(f"Timeout waiting for element: {hero_heading_selector}")
-
-async def wait_for_js_and_element(page, selector, timeout=60000):
-    try:
-        await page.wait_for_function(
-            'document.readyState === "complete"',
-            timeout=timeout
-        )
-        print("Page fully loaded.")
-    except PlaywrightTimeoutError:
-        print("Timeout while waiting for page load.")
-
-    try:
-        await page.wait_for_selector(selector, state="visible", timeout=timeout)
-        print(f"Element {selector} is visible.")
-    except PlaywrightTimeoutError:
-        print(f"Timeout waiting for element: {selector}")
-
+# Import consolidated functions from qa_tools
+from qa_tools import (
+    clear_screenshots_directory,
+    wait_for_js_and_element_async,
+    detect_js_errors_from_specific_files_async,
+    save_page_source_async,
+    browser
+)
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "browser",
@@ -201,7 +58,7 @@ async def test_oneaz_stgtags_and_js_errors(
 
     specific_js_files = ['finalytics.js', 'finalytics-function.js', 'settings_div.js', 'settings.js', 'controlbar.js', 'settings.js?code=oneaz', 'settings.js?code=oneaz:80']
     error_tracker = []
-    detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker, browser_instance, browser_type)
+    await detect_js_errors_from_specific_files_async(client, page, specific_js_files, error_tracker, screenshots_directory)
 
     print(f"About to go to home_url {homepage_url}")
 
@@ -219,7 +76,7 @@ async def test_oneaz_stgtags_and_js_errors(
 
         # Save the page source to a file
         page_source_filepath = f'{screenshots_directory}/homepage_source.html'
-        save_page_source(page, page_source_filepath)
+        await save_page_source_async(page, page_source_filepath)
 
         # Open the "View Source" page only if not using webkit since not valid URL format for webkit
         view_source_url = f"view-source:{homepage_url}"
@@ -232,7 +89,7 @@ async def test_oneaz_stgtags_and_js_errors(
             print("Screenshot with source code NOT taken for webkit browser engine used by Safari.")
 
         # Call detect_js_errors_from_specific_files after navigating to the homepage
-        detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker, browser_instance, browser_type)
+        await detect_js_errors_from_specific_files_async(client, page, specific_js_files, error_tracker, screenshots_directory)
 
         print(f"Going to test_scenario_url {test_scenario_url}...")
         await page.goto(test_scenario_url, timeout=60000)
@@ -247,7 +104,7 @@ async def test_oneaz_stgtags_and_js_errors(
         await page.screenshot(path=f'{screenshots_directory}/product_page_for_ad_screenshot.png', full_page=True)
 
         # Call detect_js_errors_from_specific_files after navigating to the test scenario
-        detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker, browser_instance, browser_type)
+        await detect_js_errors_from_specific_files_async(client, page, specific_js_files, error_tracker, screenshots_directory)
 
         print(f"Returning to homepage_url {homepage_url} to view the ad...")
         await page.goto(homepage_url, timeout=60000)
@@ -263,7 +120,7 @@ async def test_oneaz_stgtags_and_js_errors(
         # CHANGED: Take ONLY the #homeSlider section screenshot and name it hero_ad_only
         # ---------------------------------------------
         print("Waiting for #homeSlider on the homepage...")  # CHANGED
-        await wait_for_js_and_element(page, "#homeSlider", timeout=60000)  # CHANGED
+        await wait_for_js_and_element_async(page, "#homeSlider", timeout=60000)  # CHANGED
         await page.wait_for_selector("#homeSlider", state='visible', timeout=60000)  # CHANGED
 
         # CHANGED: Capture only the targeted section instead of full-page
@@ -274,7 +131,7 @@ async def test_oneaz_stgtags_and_js_errors(
         # ---------------------------------------------
 
         # (Optional keep) Validate the text still if desired
-        await wait_for_js_and_element(page, hero_heading_selector, timeout=60000)
+        await wait_for_js_and_element_async(page, hero_heading_selector, timeout=60000)
         await page.wait_for_selector(hero_heading_selector, state='visible', timeout=60000)
         ad_heading = await page.locator(hero_heading_selector).inner_text()
         # Instead of comparing the heading, compare the images in folder BASELINE/hero_ad_only_baseline.png with the current /hero_ad_only.png using OCR
@@ -284,7 +141,7 @@ async def test_oneaz_stgtags_and_js_errors(
             print(f"Ad heading '{ad_heading}' matches expected heading '{expected_heading}'")
 
         # Call detect_js_errors_from_specific_files after going back to the homepage to view the ad
-        detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker, browser_instance, browser_type)
+        await detect_js_errors_from_specific_files_async(client, page, specific_js_files, error_tracker, screenshots_directory)
 
         # Verify the HTML snippet exists in the page source
         html_content = await page.content()

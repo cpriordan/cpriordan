@@ -112,17 +112,17 @@ async def test_swfcu_rvboatloan_stgtags_and_js_errors(
 
         # Get page content for validation
         html_content = await page.content()
-        
+
         # Use consolidated function for Finalytics tag validation
         cloudfront_urls = (html_finalytics_stg_cloudfront, html_finalytics_stg_cloudfront2)
         common_tags = get_common_finalytics_tags()
         required_tags = [
             common_tags['css_tag'],
-            common_tags['js_tag'], 
+            common_tags['js_tag'],
             common_tags['function_js_tag'],
             common_tags['settings_div_js_tag']
         ]
-        
+
         validate_finalytics_tags(html_content, cloudfront_urls, required_tags, client)
 
     except PlaywrightTimeoutError as e:

@@ -11,145 +11,18 @@ from datetime import datetime
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
 # Function to clear the directory before saving new screenshots
-def clear_screenshots_directory(directory):
-    if os.path.exists(directory):
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-            except Exception as e:
-                print(f"Failed to delete {file_path}. Reason: {e}")
-    else:
-        os.makedirs(directory)
 
-async def save_page_source(page, filepath):
-    try:
-        html_content = await page.content()
-        with open(filepath, 'w', encoding='utf-8') as file:
-            file.write(html_content)
-        print(f"Page source saved to {filepath}")
-    except Exception as e:
-        print(f"Failed to save page source: {e}")
+# Add parent directory to path for qa_tools import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker):
-    async def handle_console_message(msg):
-        location = msg.location
-        file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
-
-        if msg.type == 'error' and file_name in specific_files and file_name.endswith('.js'):
-            error_message = f"JS Error found in {file_name}: {msg.text} for client {client}"
-            print(error_message)
-            error_tracker.append(error_message)
-
-            screenshot_path = os.path.join(os.getcwd(), f"js_error_{client}.png")
-            await page.screenshot(path=screenshot_path)
-            print(f"Screenshot of JS error saved at {screenshot_path}")
-
-    page.on('console', lambda msg: asyncio.ensure_future(handle_console_message(msg)))
-
-async def wait_for_js_and_element_with_frame_capture(page, selector, screenshots_directory):
-    from datetime import datetime
-    import os
-    import io
-    from PIL import Image
-
-    await page.wait_for_selector(selector, state='attached', timeout=15000)
-
-    # Scroll to element to trigger potential lazy load
-    await page.locator(selector).scroll_into_view_if_needed()
-
-    # Disable only cache headers and keep stylesheets and images to avoid flickering
-    await page.route("**/*", lambda route: route.continue_())
-    await page.evaluate("""
-        if ('caches' in window) {
-            caches.keys().then(function(names) {
-                for (let name of names)
-                    caches.delete(name);
-            });
-        }
-    """)
-
-    print("Capturing key render phase screenshots...")
-
-    try:
-        # BEFORE FCP
-        await page.wait_for_timeout(500)  # wait a bit before FCP
-        buffer = await page.locator(selector).screenshot()
-        with open(os.path.join(screenshots_directory, "render_before_fcp.png"), "wb") as f:
-            f.write(buffer)
-
-        # DURING FCP
-        await page.wait_for_timeout(700)  # target window of FCP
-        buffer = await page.locator(selector).screenshot()
-        with open(os.path.join(screenshots_directory, "render_during_fcp.png"), "wb") as f:
-            f.write(buffer)
-
-        # AFTER full render (wait until selector stable or delay)
-        await page.wait_for_timeout(3000)
-        buffer = await page.locator(selector).screenshot()
-        with open(os.path.join(screenshots_directory, "render_after_complete.png"), "wb") as f:
-            f.write(buffer)
-
-    except Exception as e:
-        print(f"Error during selective render capture: {e}")
-async def wait_for_js_and_element_with_frame_capture(page, selector, screenshots_directory):
-    from datetime import datetime
-    import os
-    import io
-    from PIL import Image, ImageChops
-
-    await page.wait_for_selector(selector, state='attached', timeout=15000)
-
-    # Scroll to element to trigger potential lazy load
-    await page.locator(selector).scroll_into_view_if_needed()
-
-    # Fully disable caching and force rerender
-    await page.route("**/*", lambda route: route.continue_())
-    await page.evaluate("""
-        if ('caches' in window) {
-            caches.keys().then(function(names) {
-                for (let name of names)
-                    caches.delete(name);
-            });
-        }
-    """)
-
-    print("Capturing frame-by-frame screenshots before, during, and after selector is rendered...")
-
-    frame_index = 0
-    start = datetime.now()
-    captured_frames = []
-    last_image = None
-
-    # Schedule next capture using efficient timestamps
-    end_time = start.timestamp() + 3  # Reduce max capture to 3s to minimize test impact
-    aggressive_phase = start.timestamp() + 1.5
-
-    while datetime.now().timestamp() < end_time:
-        now = datetime.now().timestamp()
-        try:
-            buffer = await page.locator(selector).screenshot(type='png')
-            current_image = Image.open(io.BytesIO(buffer))
-
-            if last_image is None or ImageChops.difference(current_image, last_image).getbbox():
-                filename = f"frame_{frame_index:03}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png"
-                path = os.path.join(screenshots_directory, filename)
-                with open(path, "wb") as f:
-                    f.write(buffer)
-                captured_frames.append(path)
-                frame_index += 1
-                last_image = current_image
-
-            # Avoid blocking render thread, back off slightly
-            await page.wait_for_timeout(60 if now < aggressive_phase else 120)
-        except Exception as e:
-            print(f"Frame capture error: {e}")
-            break
-
-    print(f"Captured {len(captured_frames)} distinct frames.")
+# Import consolidated functions from qa_tools
+from qa_tools import (
+    clear_screenshots_directory,
+    wait_for_js_and_element_async,
+    detect_js_errors_from_specific_files_async,
+    save_page_source_async,
+    browser
+)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -181,7 +54,7 @@ async def test_barcons_auto_loan_personalization_on(
 
     specific_js_files = ['finalytics.js', 'finalytics-function.js', 'settings_div.js', 'settings.js', 'controlbar.js']
     error_tracker = []
-    detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker)
+    await detect_js_errors_from_specific_files_async(client, page, specific_js_files, error_tracker, screenshots_directory)
 
     try:
         print(f"Going to homepage_url {homepage_url}...")

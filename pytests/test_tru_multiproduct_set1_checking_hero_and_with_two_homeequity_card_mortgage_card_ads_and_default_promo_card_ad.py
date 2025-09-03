@@ -12,25 +12,18 @@ from playwright.async_api import BrowserContext
 # FS helpers
 # =====================
 
-def clear_screenshots_directory(directory):
-    if os.path.exists(directory):
-        print(f"Directory {directory} exists so remove all files in the directory")
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-            except Exception as e:
-                print(f"Failed to delete {file_path}. Reason: {e}")
-    else:
-        os.makedirs(directory)
-        print(f"Created directory {directory} since it doesn't exist")
+# Add parent directory to path for qa_tools import
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# =====================
-# Network quiet helper
-# =====================
+# Import consolidated functions from qa_tools
+from qa_tools import (
+    clear_screenshots_directory,
+    wait_for_js_and_element_async,
+    detect_js_errors_from_specific_files_async,
+    save_page_source_async,
+    browser
+)
 
 async def wait_for_network_quiet(page, idle_ms: int = 1200, max_wait: int = 15000):
     loop = asyncio.get_event_loop()

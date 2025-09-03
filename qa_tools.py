@@ -1,9 +1,11 @@
+import asyncio
 import os
 import shutil
 import time
 import pytest
 import pytest_asyncio
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, expect as sync_expect, TimeoutError as SyncTimeoutError
+from playwright.async_api import async_playwright, expect as async_expect, TimeoutError as AsyncTimeoutError
 from pyotp import TOTP
 from dotenv import load_dotenv
 
@@ -268,7 +270,6 @@ class AdminLoginPage:
             return otp_code
 
     async def _enter_2fa_code_async(self, totp_instance):
-        import asyncio
         otp_input = self.page.locator('#id_token-otp_token')
         await self.page.wait_for_selector('#id_token-otp_token', timeout=60000)
         await self.page.wait_for_timeout(300)
@@ -305,9 +306,6 @@ def setup_admin_test_environment(client_type):
     Returns:
         tuple: (findata_user, findata_pw, findata_otp, test_env, totp, screenshots_dir)
     """
-    from pyotp import TOTP
-    from dotenv import load_dotenv
-    import os
     
     load_dotenv()
     
@@ -340,8 +338,6 @@ def setup_admin_test_environment(client_type):
 @pytest.fixture(scope="function")
 def admin_browser_context_sync():
     """Sync browser fixture for admin tests."""
-    import os
-    from dotenv import load_dotenv
     load_dotenv()  # Load .env file
     headless = os.environ.get("HEADLESS", "false").lower() == "true"
     with sync_playwright() as playwright:
@@ -355,9 +351,6 @@ def admin_browser_context_sync():
 @pytest_asyncio.fixture
 async def admin_browser_context_async():
     """Async browser fixture for admin tests."""
-    import os
-    from dotenv import load_dotenv
-    from playwright.async_api import async_playwright
     load_dotenv()  # Load .env file
     headless = os.environ.get("HEADLESS", "false").lower() == "true"
     async with async_playwright() as playwright:
@@ -395,10 +388,9 @@ def validate_admin_login_success(page, test_env, expected_permissions=None):
         test_env: Test environment (stg, prod, etc.)
         expected_permissions: Dict of {"link_text": should_exist} for permission validation
     """
-    from playwright.sync_api import expect
     
     # Verify URL redirect to admin home
-    expect(page).to_have_url(f'https://{test_env}finalyticsdata.com/admin/')
+    sync_expect(page).to_have_url(f'https://{test_env}finalyticsdata.com/admin/')
     
     # Validate server errors
     validate_no_server_error(page)
@@ -417,10 +409,9 @@ async def validate_admin_login_success_async(page, test_env, expected_permission
     """
     Validate successful admin login and check permissions (async version).
     """
-    from playwright.async_api import expect
     
     # Verify URL redirect to admin home
-    expect(page).to_have_url(f'https://{test_env}finalyticsdata.com/admin/')
+    async_expect(page).to_have_url(f'https://{test_env}finalyticsdata.com/admin/')
     
     # Validate server errors
     await validate_admin_no_server_error_async(page)
@@ -469,13 +460,11 @@ async def save_page_source_async(page, filepath):
         print(f"Failed to save page source: {e}")
 
 
-def detect_js_errors_from_specific_files_sync(client, page, specific_files, error_tracker, browser_instance=None, browser_type="chromium"):
+def detect_js_errors_from_specific_files_sync(client, page, specific_files, error_tracker, browser_type="chromium"):
     """
     Detect JavaScript errors from specific files (sync version for fin-tests).
     Compatible with both sync and async Playwright pages.
     """
-    import asyncio
-    
     def handle_console_message(msg):
         location = msg.location
         file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
@@ -502,8 +491,6 @@ async def detect_js_errors_from_specific_files_async(client, page, specific_file
     """
     Detect JavaScript errors from specific files (async version for fin-tests).
     """
-    import asyncio
-    
     async def handle_console_message(msg):
         try:
             location = msg.location
@@ -531,7 +518,6 @@ def wait_for_js_and_element_sync(page, hero_heading_selector, timeout=60000):
     """
     Wait for page load and element visibility (sync version for fin-tests).
     """
-    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
     
     try:
         page.evaluate('''new Promise(resolve => {
@@ -542,7 +528,7 @@ def wait_for_js_and_element_sync(page, hero_heading_selector, timeout=60000):
             }
         });''')
         print("Page fully loaded.")
-    except PlaywrightTimeoutError:
+    except SyncTimeoutError:
         print("Timeout while waiting for page load.")
 
     # Wait for the specific element to be visible
@@ -552,16 +538,14 @@ def wait_for_js_and_element_sync(page, hero_heading_selector, timeout=60000):
             timeout=timeout
         )
         print(f"Element {hero_heading_selector} is visible.")
-    except PlaywrightTimeoutError:
+    except SyncTimeoutError:
         print(f"Timeout waiting for element: {hero_heading_selector}")
 
 
-async def wait_for_js_and_element_async(page, hero_heading_selector, timeout=45000):
+async def wait_for_js_and_element_async(page, hero_heading_selector, timeout=10000):
     """
     Wait for page load and element visibility (async version for fin-tests).
     """
-    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
-    import pytest
     
     try:
         print("Waiting for the document to be fully loaded...")
@@ -573,7 +557,7 @@ async def wait_for_js_and_element_async(page, hero_heading_selector, timeout=450
             }
         });''')
         print("Page fully loaded.")
-    except PlaywrightTimeoutError:
+    except AsyncTimeoutError:
         print("Timeout while waiting for page load.")
 
     try:
@@ -584,7 +568,7 @@ async def wait_for_js_and_element_async(page, hero_heading_selector, timeout=450
             timeout=timeout
         )
         print(f"Element '{hero_heading_selector}' is now visible.")
-    except PlaywrightTimeoutError as e:
+    except AsyncTimeoutError as e:
         pytest.fail(f"Timeout waiting for element '{hero_heading_selector}' to become visible: {e}")
 
 
@@ -601,8 +585,6 @@ def validate_finalytics_tags(page_content, cloudfront_urls, required_tags, clien
     Returns:
         tuple: (cloudfront_found, missing_tags)
     """
-    import pytest
-    
     # Check cloudfront URLs
     cloudfront_found = any(tag in page_content for tag in cloudfront_urls)
     if not cloudfront_found:
@@ -628,9 +610,6 @@ async def browser(request):
     Respects .env variables: HEADLESS, BROWSER, HTTP_USERNAME, HTTP_PASSWORD
     Can be parameterized with credentials or used without parameters.
     """
-    from playwright.async_api import async_playwright
-    from dotenv import load_dotenv
-    
     # Load environment variables from .env file
     load_dotenv()
     
@@ -681,9 +660,6 @@ async def browser_no_auth():
     Simple browser fixture without HTTP authentication for ad expiration tests.
     Respects .env HEADLESS variable.
     """
-    from playwright.async_api import async_playwright
-    from dotenv import load_dotenv
-    
     load_dotenv()
     headless = os.environ.get("HEADLESS", "false").lower() in ["true", "1", "yes"] 
     browser_type = os.environ.get("BROWSER", "chromium").lower()

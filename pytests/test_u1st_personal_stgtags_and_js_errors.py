@@ -9,136 +9,18 @@ from playwright.async_api import async_playwright, TimeoutError as PlaywrightTim
 from playwright.sync_api import sync_playwright
 
 # Function to clear the directory before saving new screenshots
-def clear_screenshots_directory(directory):
-    if os.path.exists(directory):
-        # Remove all files in the directory
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)  # Remove file or symbolic link
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)  # Remove directory
-            except Exception as e:
-                print(f"Failed to delete {file_path}. Reason: {e}")
-    else:
-        # Create the directory if it doesn't exist
-        os.makedirs(directory)
 
-async def save_page_source(page, filepath):
-    """Saves the page's source code to a file."""
-    try:
-        html_content = await page.content()
-        with open(filepath, 'w', encoding='utf-8') as file:
-            file.write(html_content)
-        print(f"Page source saved to {filepath}")
-    except Exception as e:
-        print(f"Failed to save page source: {e}")
+# Add parent directory to path for qa_tools import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker):
-    """
-    Listens for console messages to detect JavaScript errors from specific files.
-    Updates the error_tracker with detected errors.
-    """
-    async def handle_console_message(msg):
-        location = msg.location
-        file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
-
-        # Check if the message is an error and from a specific JS file
-        if msg.type == 'error' and file_name in specific_files and file_name.endswith('.js'):
-            error_message = f"JS Error found in {file_name}: {msg.text} for client {client}"
-            print(error_message)
-
-            # Add error message to the tracker
-            error_tracker.append(error_message)
-
-            # Take a screenshot for debugging
-            screenshot_path = os.path.join(os.getcwd(), f"js_error_{client}.png")
-            await page.screenshot(path=screenshot_path)
-            print(f"Screenshot of JS error saved at {screenshot_path}")
-
-    # Listen for console events on the page
-    page.on('console', lambda msg: asyncio.ensure_future(handle_console_message(msg)))
-
-# Fixture to set up Playwright and launch the browser
-# @pytest_asyncio.fixture
-# async def browser(request):
-#     """Fixture to launch the browser with HTTP credentials."""
-#     username = request.param.get("username")
-#     password = request.param.get("password")
-#     async with async_playwright() as playwright:
-#         browser = await playwright.chromium.launch(headless=False, args=["--remote-debugging-port=9222"])
-#         context = await browser.new_context(http_credentials={"username": username, "password": password})
-#         context.set_default_timeout(40000)
-#         yield context
-#         await browser.close()
-
-# @pytest.fixture(params=["chromium", "firefox", "opera", "edge"])
-# def browser(request):
-#     with sync_playwright() as p:
-#         browser_type_name = request.param
-#         browser_args = ["--start-maximized", "--auto-open-devtools-for-tabs"]
-#
-#         if browser_type_name in ["opera", "edge"]:
-#             executable_path = {
-#                 "opera": "C:/Users/c_p_r/AppData/Local/Programs/Opera/opera.exe",
-#                 "edge": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
-#             }[browser_type_name]
-#
-#             browser = p.chromium.launch(
-#                 headless=False,
-#                 executable_path=executable_path,
-#                 args=browser_args
-#             )
-#         else:
-#             # Make sure browser_type_name is used correctly here
-#             browser_type = getattr(p, browser_type_name)
-#             browser = browser_type.launch(
-#                 headless=False,
-#                 args=browser_args
-#             )
-#
-#         context = browser.new_context()
-#         yield context
-#         browser.close()
-
-# @pytest.fixture(params=["chromium", "firefox", "opera", "edge"])
-
-async def wait_for_js_and_element(page, hero_heading_selector, timeout=40000):
-    """
-    Waits for the document to be fully loaded and for a specific element to become visible.
-    """
-    try:
-        print("Waiting for the document to be fully loaded...")
-        await page.evaluate('''new Promise(resolve => {
-            if (document.readyState === 'complete') {
-                resolve();
-            } else {
-                window.addEventListener('load', resolve);
-            }
-        });''')
-
-        print(f"Waiting for the element '{hero_heading_selector}' to become visible...")
-
-        await page.wait_for_function(
-            f'document.querySelector("{hero_heading_selector}") !== null && '
-            f'document.querySelector("{hero_heading_selector}").offsetHeight > 0',
-            timeout=timeout
-        )
-        print(f"Element '{hero_heading_selector}' is now visible.")
-    except PlaywrightTimeoutError as e:
-        pytest.fail(f"Timeout waiting for element '{hero_heading_selector}' to become visible: {e}")
-
-# @pytest.mark.asyncio
-# @pytest.mark.parametrize(
-#     "browser",
-#     [{"username": "uccustaging", "password": "LoveWYBank2021!"}],
-#     indirect=True,
-# )
-
-# And in the test case, update the parametrize to include 'browser' key too
-
-# Parametrize test across multiple browsers dynamically with credentials
+# Import consolidated functions from qa_tools
+from qa_tools import (
+    clear_screenshots_directory,
+    wait_for_js_and_element_async,
+    detect_js_errors_from_specific_files_async,
+    save_page_source_async,
+    browser
+)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -174,7 +56,7 @@ async def test_u1st_personal_stgtags_and_js_errors(
 
     specific_js_files = ['finalytics.js', 'finalytics-function.js', 'settings_div.js', 'settings.js', 'controlbar.js']
     error_tracker = []
-    detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker)
+    await detect_js_errors_from_specific_files_async(client, page, specific_js_files, error_tracker, screenshots_directory)
 
     try:
         print(f"Going to homepage_url {homepage_url}...")
@@ -210,7 +92,7 @@ async def test_u1st_personal_stgtags_and_js_errors(
         # time.sleep(20)
         print(f"Waiting for {hero_heading_selector} on the homepage...")
         await page.screenshot(path=f'{screenshots_directory}/homepage_before_selector_screenshot.png')
-        await wait_for_js_and_element(page, hero_heading_selector, timeout=90000)
+        await wait_for_js_and_element_async(page, hero_heading_selector, timeout=90000)
         # Strip any white space in the heading
         ad_on_hero_content_h1 = await page.locator(hero_heading_selector).inner_text()
         ad_on_hero_content_h1_normalized = ad_on_hero_content_h1.replace("\n", " ").strip()

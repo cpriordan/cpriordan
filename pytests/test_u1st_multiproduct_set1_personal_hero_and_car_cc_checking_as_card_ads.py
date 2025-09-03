@@ -17,43 +17,18 @@ from playwright.async_api import BrowserContext
 # Utils
 # =====================
 
-def clear_screenshots_directory(directory):
-    if os.path.exists(directory):
-        print(f"Directory {directory} exists so remove all files in the directory")
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-            except Exception as e:
-                print(f"Failed to delete {file_path}. Reason: {e}")
-    else:
-        os.makedirs(directory)
-        print(f"Created directory {directory} since it doesn't exist")
+# Add parent directory to path for qa_tools import
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-async def save_page_source(page, filepath):
-    try:
-        html_content = await page.content()
-        with open(filepath, 'w', encoding='utf-8') as file:
-            file.write(html_content)
-        print(f"Page source saved to {filepath}")
-    except Exception as e:
-        print(f"Failed to save page source: {e}")
-
-def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker):
-    async def handle_console_message(msg):
-        location = msg.location
-        file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
-        if msg.type == 'error' and file_name in specific_files and file_name.endswith('.js'):
-            error_message = f"JS Error found in {file_name}: {msg.text} for client {client}"
-            print(error_message)
-            error_tracker.append(error_message)
-            screenshot_path = os.path.join(os.getcwd(), f"js_error_{client}.png")
-            await safe_page_screenshot(page, screenshot_path, full_page=True)  # CHANGED
-            print(f"Screenshot of JS error saved at {screenshot_path}")
-    page.on('console', lambda msg: asyncio.ensure_future(handle_console_message(msg)))
+# Import consolidated functions from qa_tools
+from qa_tools import (
+    clear_screenshots_directory,
+    wait_for_js_and_element_async,
+    detect_js_errors_from_specific_files_async,
+    save_page_source_async,
+    browser
+)
 
 async def validate_no_server_error(page):
     error_keywords = ["Server Error", "(500)", "error", "Page not found", "Not Found"]
@@ -134,31 +109,6 @@ async def safe_page_screenshot(page, path: str, *, clip: dict | None = None, ful
             f.write(base64.b64decode(img_b64))
         return
 
-async def wait_for_js_and_element(page, hero_heading_selector, timeout=40000):
-    try:
-        print("Waiting for the document to be fully loaded...")
-        await page.evaluate('''new Promise(resolve => {
-            if (document.readyState === 'complete') { resolve(); }
-            else { window.addEventListener('load', resolve); }
-        });''')
-        print(f"Waiting for the element '{hero_heading_selector}' to become visible...")
-        await page.wait_for_function(
-            f'document.querySelector("{hero_heading_selector}") !== null && '
-            f'document.querySelector("{hero_heading_selector}").offsetHeight > 0',
-            timeout=timeout
-        )
-        print(f"Element '{hero_heading_selector}' is now visible.")
-    except PlaywrightTimeoutError as e:
-        pytest.fail(f"Timeout waiting for element '{hero_heading_selector}' to become visible: {e}")
-
-# =====================
-# Browser fixture with font hardening
-# =====================
-
-# =====================
-# The test (adapted to use hardened helpers)
-# =====================
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "browser",
@@ -232,7 +182,7 @@ async def test_u1st_multiproducts_and_js_errors(
 
     specific_js_files = ['finalytics.js', 'finalytics-function.js', 'settings_div.js', 'settings.js', 'controlbar.js']
     error_tracker = []
-    detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker)
+    await detect_js_errors_from_specific_files_async(client, page, specific_js_files, error_tracker, screenshots_directory)
 
     screenshot_index = 0
 
@@ -259,7 +209,7 @@ async def test_u1st_multiproducts_and_js_errors(
         print(f"Waiting for {hero_heading_selector} on the homepage...")
         screenshot_index += 1
         await safe_page_screenshot(page, f'{screenshots_directory}{screenshot_index}_homepage_before_heading_selector_screenshot.png', full_page=True)  # CHANGED
-        await wait_for_js_and_element(page, hero_heading_selector, timeout=60000)
+        await wait_for_js_and_element_async(page, hero_heading_selector, timeout=60000)
 
         ad_on_hero_content_h1 = await page.locator(hero_heading_selector).inner_text()
         ad_on_hero_content_h1_normalized = ad_on_hero_content_h1.replace("\n", " ").strip()

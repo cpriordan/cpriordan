@@ -175,3 +175,24 @@ pip install python-lsp-server
 ```
 
 This enables better code completion, navigation, and refactoring suggestions when working with the test suite.
+
+## Cleanup and Maintenance
+
+### Temporary Files
+When working on test consolidation or refactoring, temporary files may be created:
+- `batch_refactor_fin_tests.py`
+- `clean_imports.py` 
+- `consolidate_browser_fixtures.py`
+- `consolidate_browser_fixtures_pytests.py`
+- `fix_import_paths.py`
+- `fix_syntax_errors.py`
+- `manual_fix_remaining.py`
+- `test_consolidation_results.py`
+- `test_qa_tools_consolidation.py`
+
+These can be safely deleted after successful test consolidation:
+```bash
+rm -f batch_refactor_fin_tests.py clean_imports.py consolidate_browser_fixtures.py
+rm -f consolidate_browser_fixtures_pytests.py fix_import_paths.py fix_syntax_errors.py  
+rm -f manual_fix_remaining.py test_consolidation_results.py test_qa_tools_consolidation.py
+```
