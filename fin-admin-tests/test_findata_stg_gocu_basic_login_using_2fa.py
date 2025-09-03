@@ -1,27 +1,19 @@
 
 import os
+import sys
 import time
 
 import pytest
 from playwright.sync_api import expect
-from pyotp import TOTP
-from dotenv import load_dotenv
-from qa_tools import browser_context, clear_screenshots_directory
 
-# Load environment variables from .env
-load_dotenv()
+# Add parent directory to path to import qa_tools
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from qa_tools import browser_context, clear_screenshots_directory, setup_environment_variables
 
-# Validate environment variables
-findata_user = os.environ.get("FINDATA_GOCU_USER")
-findata_pw = os.environ.get("FINDATA_GOCU_PW")
-findata_otp = os.environ.get("FINDATA_GOCU_OTP")
-test_env = os.environ.get("TEST_ENVIRONMENT")
-
-if not findata_user or not findata_pw or not findata_otp:
-    raise ValueError("Required environment variables FINDATA_GOCU_USER, FINDATA_GOCU_PW, or FINDATA_GOCU_OTP are not set!")
-
-# Configure TOTP using pyotp
-totp = TOTP(findata_otp, interval=30, digits=6, digest="sha1")
+# Setup environment variables and authentication
+findata_user, findata_pw, findata_otp, test_env, auth_handler = setup_environment_variables(
+    "FINDATA_GOCU_USER", "FINDATA_GOCU_PW", "FINDATA_GOCU_OTP"
+)
 
 def test_findata_login_using_2fa(browser_context):
     page = browser_context.new_page()
@@ -52,13 +44,13 @@ def test_findata_login_using_2fa(browser_context):
     #otp_input.wait_for(state="enabled", timeout=30000) # Ensure the field is enabled but there not be an enabled state so added a delay
 
     # Fill the TOTP code into the 2FA input field
-    ## otp_input.fill(totp.now())
+    ## otp_input.fill(auth_handler.now())
 
     # Before filling out the TOTP code, check the remaining time and generate a fresh one if needed
-    remaining_time = totp.interval - (int(time.time()) % totp.interval)
+    remaining_time = auth_handler.interval - (int(time.time()) % auth_handler.interval)
     if remaining_time < 5:  # Generate a fresh TOTP if less than 5 seconds remain
         time.sleep(remaining_time + 1)
-    otp_code = totp.now()
+    otp_code = auth_handler.now()
     otp_input.fill(otp_code)
     print(f"OTP code {otp_code} entered.")
 

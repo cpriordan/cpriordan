@@ -155,6 +155,8 @@ cython_debug/
 # Test reports
 *.html
 screenshots_*/
+*.webm
+storage_state.json
 
 # OS
 .DS_Store

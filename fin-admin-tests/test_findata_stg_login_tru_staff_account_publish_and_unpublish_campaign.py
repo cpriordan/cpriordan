@@ -1,4 +1,5 @@
 import os
+import sys
 import pytest
 import time
 import re
@@ -6,6 +7,9 @@ import urllib.parse
 from playwright.sync_api import expect
 from urllib.parse import urlparse, parse_qs
 from datetime import datetime
+
+# Add parent directory to path to import qa_tools
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from qa_tools import (browser_context, clear_screenshots_directory, 
                       validate_no_server_error, generate_otp_code, 
                       setup_environment_variables, LoginPage)
@@ -34,10 +38,10 @@ class LoginPage:
         self.page.wait_for_timeout(300)
         otp_input.wait_for(state="visible", timeout=30000) # Ensure the token input field is visible
         # Before filling out the TOTP code, check the remaining time and generate a fresh one if needed
-        remaining_time = totp.interval - (int(time.time()) % totp.interval)
+        remaining_time = auth_handler.interval - (int(time.time()) % auth_handler.interval)
         if remaining_time < 5:  # Generate a fresh TOTP if less than 5 seconds remain
             time.sleep(remaining_time + 1)
-        otp_code = totp.now()
+        otp_code = auth_handler.now()
         otp_input.fill(otp_code)
         self.page.wait_for_timeout(300)
         print(f"OTP code {otp_code} entered.")
@@ -529,7 +533,7 @@ class PublishUnpublishPage:
 
 
 # Setup environment variables
-findata_user, findata_pw, findata_otp, test_env, totp = setup_environment_variables(
+findata_user, findata_pw, findata_otp, test_env, auth_handler = setup_environment_variables(
     "FINDATA_TRU_USER", "FINDATA_TRU_PW", "FINDATA_TRU_OTP"
 )
 

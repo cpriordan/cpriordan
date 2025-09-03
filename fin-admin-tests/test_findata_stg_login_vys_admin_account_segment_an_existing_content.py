@@ -1,11 +1,13 @@
 import os
+import sys
 import pytest
 import re
 import time
 from playwright.sync_api import expect
-from pyotp import TOTP
-from dotenv import load_dotenv
-from qa_tools import browser_context, clear_screenshots_directory, validate_no_server_error
+
+# Add parent directory to path to import qa_tools
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from qa_tools import browser_context, clear_screenshots_directory, validate_no_server_error, setup_environment_variables, generate_otp_code as qa_generate_otp_code
 
 class LoginPage:
     def __init__(self, page):
@@ -29,11 +31,8 @@ class LoginPage:
         self.page.wait_for_selector('#id_token-otp_token', timeout=60000)  # Wait up to 60 seconds
         self.page.wait_for_timeout(300)
         otp_input.wait_for(state="visible", timeout=30000) # Ensure the token input field is visible
-        # Before filling out the TOTP code, check the remaining time and generate a fresh one if needed
-        remaining_time = totp.interval - (int(time.time()) % totp.interval)
-        if remaining_time < 5:  # Generate a fresh TOTP if less than 5 seconds remain
-            time.sleep(remaining_time + 1)
-        otp_code = totp.now()
+        # Generate OTP code using the auth handler
+        otp_code = qa_generate_otp_code(auth_handler)
         otp_input.fill(otp_code)
         self.page.wait_for_timeout(300)
         print(f"OTP code {otp_code} entered.")
@@ -361,31 +360,16 @@ def check_url_pattern(page, base_url, param_patterns):
             return False
     return True
 
-# Load environment variables from .env
-load_dotenv()
-
-# Validate environment variables
-findata_user = os.environ.get("FINDATA_VYS_USER")
-findata_pw = os.environ.get("FINDATA_VYS_PW")
-findata_otp = os.environ.get("FINDATA_VYS_OTP")
-test_env = os.environ.get("TEST_ENVIRONMENT")
-
-if not findata_user or not findata_pw or not findata_otp or not test_env:
-    raise ValueError("Required environment variables FINDATA_VYS_USER, FINDATA_VYS_PW, FINDATA_VYS_OTP or TEST_ENVIRONMENT are not set!")
-
-# Configure TOTP using pyotp
-totp = TOTP(findata_otp, interval=30, digits=6, digest="sha1")
+# Setup environment variables and authentication
+findata_user, findata_pw, findata_otp, test_env, auth_handler = setup_environment_variables(
+    "FINDATA_VYS_USER", "FINDATA_VYS_PW", "FINDATA_VYS_OTP"
+)
 
 # HTTP credentials are now configured via environment variables in qa_tools.py
 # Set HTTP_USERNAME=trustonestage and HTTP_PASSWORD=TruStone2024!! in your environment
 def generate_otp_code():
-    import time
-    remaining_time = totp.interval - (int(time.time()) % totp.interval)
-    if remaining_time < 5:
-        # short pause so the token rolls over
-        # from playwright.sync_api import sync_playwright
-        time.sleep(remaining_time + 1)
-    return totp.now()
+    """Use the qa_tools generate_otp_code with auth_handler."""
+    return qa_generate_otp_code(auth_handler)
 
 
 def test_segment_an_existing_content(browser_context):

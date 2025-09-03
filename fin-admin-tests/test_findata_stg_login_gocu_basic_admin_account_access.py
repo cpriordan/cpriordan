@@ -1,13 +1,17 @@
 import os
+import sys
 import time
 import pytest
 from playwright.sync_api import expect
+
+# Add parent directory to path to import qa_tools
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from qa_tools import (browser_context, clear_screenshots_directory, 
                       validate_no_server_error, check_link_on_page, 
                       generate_otp_code, setup_environment_variables, LoginPage)
 
 # Setup environment variables
-findata_user, findata_pw, findata_otp, test_env, totp = setup_environment_variables(
+findata_user, findata_pw, findata_otp, test_env, auth_handler = setup_environment_variables(
     "FINDATA_GOCU_USER", "FINDATA_GOCU_PW", "FINDATA_GOCU_OTP"
 )
 
@@ -27,7 +31,7 @@ def test_check_basic_admin_account_access(browser_context):
     # Wait for the 2FA input field and enter OTP
     print(f"Username {findata_user} and password were filled.")
     print("Waiting for 2FA input field...")
-    login_page.enter_2fa_code(totp)
+    login_page.enter_2fa_code(auth_handler)
 
     # Click the login button after filling out the TOTP
     page.get_by_role("button", name="Login").click()
