@@ -13,7 +13,6 @@ from itertools import islice
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import BrowserContext
 
-
 # =====================
 # Utils
 # =====================
@@ -34,7 +33,6 @@ def clear_screenshots_directory(directory):
         os.makedirs(directory)
         print(f"Created directory {directory} since it doesn't exist")
 
-
 async def save_page_source(page, filepath):
     try:
         html_content = await page.content()
@@ -43,7 +41,6 @@ async def save_page_source(page, filepath):
         print(f"Page source saved to {filepath}")
     except Exception as e:
         print(f"Failed to save page source: {e}")
-
 
 def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker):
     async def handle_console_message(msg):
@@ -58,13 +55,11 @@ def detect_js_errors_from_specific_files(client, page, specific_files, error_tra
             print(f"Screenshot of JS error saved at {screenshot_path}")
     page.on('console', lambda msg: asyncio.ensure_future(handle_console_message(msg)))
 
-
 async def validate_no_server_error(page):
     error_keywords = ["Server Error", "(500)", "error", "Page not found", "Not Found"]
     page_text = await page.inner_text("body")
     found_errors = [msg for msg in error_keywords if msg in page_text]
     assert not found_errors, f"Error messages found on the page: {', '.join(found_errors)}"
-
 
 # =====================
 # Navigation + Screenshot hardening
@@ -114,7 +109,6 @@ async def navigate_and_settle(page, url, *, ready_selector: str | None = None, d
         except Exception:
             pass
 
-
 async def safe_page_screenshot(page, path: str, *, clip: dict | None = None, full_page: bool = False, timeout: int = 20000):
     """Take a screenshot but fall back to CDP capture if Playwright waits on fonts.
     Also disables animations implicitly via emulate reduced motion.
@@ -140,7 +134,6 @@ async def safe_page_screenshot(page, path: str, *, clip: dict | None = None, ful
             f.write(base64.b64decode(img_b64))
         return
 
-
 async def wait_for_js_and_element(page, hero_heading_selector, timeout=40000):
     try:
         print("Waiting for the document to be fully loaded...")
@@ -158,70 +151,9 @@ async def wait_for_js_and_element(page, hero_heading_selector, timeout=40000):
     except PlaywrightTimeoutError as e:
         pytest.fail(f"Timeout waiting for element '{hero_heading_selector}' to become visible: {e}")
 
-
 # =====================
 # Browser fixture with font hardening
 # =====================
-
-@pytest_asyncio.fixture
-async def browser(request) -> BrowserContext:
-    username = request.param.get("username")
-    password = request.param.get("password")
-
-    async with async_playwright() as pw:
-        browser = await pw.chromium.launch(
-            headless=True,
-            args=[
-                "--disable-remote-fonts",  # NEW
-                "--hide-scrollbars",
-                "--disable-extensions",
-                "--disable-background-timer-throttling",
-                "--no-default-browser-check",
-                "--no-first-run",
-            ],
-        )
-        context = await browser.new_context(http_credentials={"username": username, "password": password})
-        context.set_default_timeout(60000)  # CHANGED: more generous default
-
-        # Patch FontFaceSet across all frames early  # NEW
-        await context.add_init_script(
-            """
-            (() => {
-              function patch(win){
-                try{
-                  const FFS = win.FontFaceSet && win.FontFaceSet.prototype;
-                  if(FFS){
-                    try{ Object.defineProperty(FFS, 'ready', { get(){ return Promise.resolve(this); } }); }catch(e){}
-                    try{ FFS.load = async function(){ return []; }; }catch(e){}
-                  }
-                }catch(_){ }
-              }
-              patch(window);
-              try{
-                const mo = new MutationObserver((muts)=>{
-                  for(const m of muts){
-                    for(const n of m.addedNodes){
-                      if(n && n.tagName === 'IFRAME' && n.contentWindow){ try{ patch(n.contentWindow); }catch(e){} }
-                    }
-                  }
-                });
-                mo.observe(document, {childList:true, subtree:true});
-              }catch(_){ }
-            })();
-            """
-        )
-
-        # Block font resource type universally (covers most cases)  # NEW
-        await context.route("**/*", lambda route: route.abort() if route.request.resource_type == 'font' else route.continue_())
-        # Extra: also catch common font file extensions  # NEW
-        await context.route("**/*.{woff,woff2,ttf,otf}", lambda route: route.abort())
-
-        try:
-            yield context
-        finally:
-            await context.close()
-            await browser.close()
-
 
 # =====================
 # The test (adapted to use hardened helpers)

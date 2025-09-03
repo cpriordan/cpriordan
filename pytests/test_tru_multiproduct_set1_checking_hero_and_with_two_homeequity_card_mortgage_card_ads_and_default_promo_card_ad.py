@@ -135,66 +135,6 @@ async def save_pdf(page, path: str):  # ⟵ still used
 # Browser fixture (PDF-friendly + font-stall proof)
 # =====================
 
-@pytest_asyncio.fixture
-async def browser(request) -> BrowserContext:
-    username = request.param.get("username")
-    password = request.param.get("password")
-    async with async_playwright() as pw:
-        # headless=True is required for Chromium PDF
-        browser = await pw.chromium.launch(
-            headless=True,
-            args=[
-                "--disable-remote-fonts",            # ⟵ keep: prevents webfont fetches
-                "--disable-renderer-backgrounding",
-                "--hide-scrollbars",
-            ],
-        )
-        context = await browser.new_context(
-            http_credentials={"username": username, "password": password},
-        )
-
-        # Patch FontFaceSet so rendering doesn't wait for fonts (all frames)
-        await context.add_init_script(
-            """
-            (() => {
-              function patch(win){
-                try{
-                  const P = win.FontFaceSet && win.FontFaceSet.prototype;
-                  if (P) {
-                    try { Object.defineProperty(P, 'ready', { get(){ return Promise.resolve(this); } }); } catch(e) {}
-                    try { P.load = async function(){ return []; }; } catch(e) {}
-                  }
-                } catch(_) {}
-              }
-              patch(window);
-              try{
-                const mo = new MutationObserver((muts)=>{
-                  for(const m of muts){
-                    for(const n of m.addedNodes){
-                      if(n && n.tagName === 'IFRAME' && n.contentWindow){
-                        try { patch(n.contentWindow); } catch(e) {}
-                      }
-                    }
-                  }
-                });
-                mo.observe(document, { childList:true, subtree:true });
-              } catch(_) {}
-            })();
-            """
-        )
-
-        # Block font resource_type regardless of extension
-        await context.route("**/*", lambda route: (
-            route.abort() if route.request.resource_type == 'font' else route.continue_()
-        ))
-
-        context.set_default_timeout(45000)
-        try:
-            yield context
-        finally:
-            await context.close()
-            await browser.close()
-
 # =====================
 # The test (captures PDFs; fixed nonempty wait)
 # =====================

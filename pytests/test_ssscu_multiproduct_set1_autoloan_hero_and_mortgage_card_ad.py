@@ -11,7 +11,6 @@ from itertools import islice
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import BrowserContext
 
-
 # Function to clear the directory before saving new screenshots
 def clear_screenshots_directory(directory):
     # print(f"In clear_screenshots_directory function with directory {directory} ...")
@@ -36,7 +35,6 @@ def clear_screenshots_directory(directory):
         os.makedirs(directory)
         print(f"Created directory {directory} since it doesn't exist")
 
-
 async def save_page_source(page, filepath):
     """Saves the page's source code to a file."""
     try:
@@ -46,7 +44,6 @@ async def save_page_source(page, filepath):
         print(f"Page source saved to {filepath}")
     except Exception as e:
         print(f"Failed to save page source: {e}")
-
 
 def detect_js_errors_from_specific_files(client, page, specific_files, error_tracker):
     """
@@ -174,7 +171,6 @@ async def wait_for_js_and_element(page, hero_heading_selector, timeout=40000):
     except PlaywrightTimeoutError as e:
         pytest.fail(f"Timeout waiting for element '{hero_heading_selector}' to become visible: {e}")
 
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "browser",
@@ -232,7 +228,6 @@ async def test_ssscu_multiproduct_and_js_errors(
 
     # context = await browser.new_context()
     page = await browser.new_page()
-
 
     specific_js_files = ['finalytics.js', 'finalytics-function.js', 'settings_div.js', 'settings.js', 'controlbar.js']
     error_tracker = []
@@ -344,7 +339,6 @@ async def test_ssscu_multiproduct_and_js_errors(
         else:
             pytest.fail("'Apply Today' button was not found or visible on the page.")
 
-
          # Go back to the main page after clicking the CTA
         print(f"Go to the homepage after clicking the CTA link...")
         await page.goto(homepage_url, timeout=60000)
@@ -417,7 +411,6 @@ async def test_ssscu_multiproduct_and_js_errors(
                 if CTA_link_href and CTA_link_href.startswith("/"):
                     CTA_link_href = urljoin(base_url, CTA_link_href)
                     print(f"Normalized relative URL to: {CTA_link_href}")
-
 
                 # Ensure expected headings are a list of possibilities
                 expected_card_ads_CTA_link = expected_card_ads_CTA_links

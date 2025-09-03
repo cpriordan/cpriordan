@@ -50,17 +50,6 @@ def detect_js_errors_from_specific_files(client, page, specific_files, error_tra
 
     page.on('console', lambda msg: asyncio.ensure_future(handle_console_message(msg)))
 
-@pytest_asyncio.fixture
-async def browser(request):
-    username = request.param.get("username")
-    password = request.param.get("password")
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=False, args=["--remote-debugging-port=9222"])
-        context = await browser.new_context(http_credentials={"username": username, "password": password})
-        context.set_default_timeout(40000)
-        yield context
-        await browser.close()
-
 async def wait_for_js_and_element_with_frame_capture(page, selector, screenshots_directory):
     from datetime import datetime
     import os

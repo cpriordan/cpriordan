@@ -60,19 +60,6 @@ def detect_js_errors_from_specific_files(client, page, specific_files, error_tra
     page.on('console', lambda msg: asyncio.ensure_future(handle_console_message(msg)))
 
 # Fixture to set up Playwright and launch the browser
-@pytest_asyncio.fixture
-async def browser(request):
-    """Fixture to launch the browser with HTTP credentials."""
-    username = request.param.get("username")
-    password = request.param.get("password")
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=False, args=["--remote-debugging-port=9222"])
-        # No need to enter http authentication for MissionFed
-        context = await browser.new_context(http_credentials={"username": username, "password": password})
-        context.set_default_timeout(40000)
-        yield context
-        await browser.close()
-
 async def wait_for_js_and_element(page, hero_heading_selector, timeout=40000):
     """
     Waits for the document to be fully loaded and for a specific element to become visible.
@@ -341,7 +328,6 @@ async def test_missionfeb_autoloan_stgtags_and_js_errors(
     error_tracker = []
     detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker)
 
-
     try:
         print(f"Going to homepage_url {homepage_url}...")
         await page.goto(homepage_url, timeout=60000)
@@ -404,7 +390,6 @@ async def test_missionfeb_autoloan_stgtags_and_js_errors(
             pytest.fail(f"Ad title '{ad_title}' does not match expected title '{expected_ad_title}'")
         else:
             print(f"Ad title '{ad_title}' matches expected title'{expected_ad_title}'")
-
 
         # Verify the HTML snippet exists in the page source
         html_content = await page.content()

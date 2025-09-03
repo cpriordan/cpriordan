@@ -64,61 +64,6 @@ def detect_js_errors_from_specific_files(client, page, specific_files, error_tra
     page.on('console', lambda msg: asyncio.ensure_future(handle_console_message(msg)))
 
 # @pytest.fixture(params=["chromium", "firefox", "opera", "edge"])
-@pytest_asyncio.fixture
-async def browser(request):
-    # Extract the browser name and custom credentials from the param
-    browser_config = request.param
-    if not isinstance(browser_config, dict):
-        raise ValueError("Expected 'request.param' to be a dict with keys like 'browser', 'username', and 'password'.")
-
-    browser_name = browser_config.get("browser", "chromium")  # default to chromium if not specified
-    username = browser_config.get("username")
-    password = browser_config.get("password")
-
-    # browser_args = ["--start-maximized", "--auto-open-devtools-for-tabs"]
-    # Remove the dev tools flag to prevent opening the dev console
-    browser_args = ["--start-maximized"]
-
-
-    async with async_playwright() as p:
-        if browser_name == "firefox":
-            browser_type = p.firefox
-            browser = await browser_type.launch(headless=False, args=browser_args)
-        elif browser_name == "webkit":
-            browser_type = p.webkit
-            browser = await browser_type.launch(headless=False, args=browser_args)
-        elif browser_name == "edge":
-            executable_path = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
-            browser = await p.chromium.launch(
-                headless=False,
-                executable_path=executable_path,
-                args=browser_args
-            )
-        elif browser_name == "opera":
-            executable_path = "C:/Users/c_p_r/AppData/Local/Programs/Opera/opera.exe"
-            browser = await p.chromium.launch(
-                headless=False,
-                executable_path=executable_path,
-                args=browser_args
-            )
-        else:
-            browser_type = p.chromium
-            browser = await browser_type.launch(
-                headless=False,
-                args=browser_args
-            )
-
-        # context = await browser.new_context()
-        # if username and password:
-        #     await context.set_http_credentials({"username": trustonestage, "password": TruStone2024!!})
-
-        http_credentials = {"username": username, "password": password} if username and password else None
-        context = await browser.new_context(http_credentials=http_credentials)
-
-        context.set_default_timeout(40000)
-        yield context
-        await browser.close()
-
 
 async def wait_for_js_and_element(page, hero_heading_selector, timeout=40000):
     """
@@ -214,7 +159,6 @@ async def test_tru_mortgage_rates_stgtags_and_js_errors(
         except PlaywrightTimeoutError:
             print("Screenshot timeout, saving page as PDF instead...")
             await page.pdf(path=f'{screenshots_directory}/mortgage_rates_page_screenshot_fallback.pdf')
-
 
         # GO TO TEST SCENARIO PRODUCT PAGE ALSO
         print(f"Going to test_scenario_url {test_scenario_url}...")
