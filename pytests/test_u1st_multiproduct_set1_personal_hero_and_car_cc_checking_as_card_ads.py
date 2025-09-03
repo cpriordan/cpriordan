@@ -27,8 +27,8 @@ from qa_tools import (
     wait_for_js_and_element_async,
     detect_js_errors_from_specific_files_async,
     save_page_source_async,
-    browser
-)
+    browser,
+    DEFAULT_TIMEOUT)
 
 async def validate_no_server_error(page):
     error_keywords = ["Server Error", "(500)", "error", "Page not found", "Not Found"]
@@ -188,7 +188,7 @@ async def test_u1st_multiproducts_and_js_errors(
 
     try:
         print(f"Going to homepage_url {homepage_url}...")
-        await navigate_and_settle(page, homepage_url, ready_selector="body", dom_timeout=60000, idle_ms=800, max_wait=8000)  # CHANGED
+        await navigate_and_settle(page, homepage_url, ready_selector="body", dom_timeout=DEFAULT_TIMEOUT, idle_ms=800, max_wait=8000)  # CHANGED
         screenshot_index += 1
         await safe_page_screenshot(page, f'{screenshots_directory}{screenshot_index}_homepage_screenshot.png', full_page=True)  # CHANGED
 
@@ -204,12 +204,12 @@ async def test_u1st_multiproducts_and_js_errors(
             print(f"Screenshot saved: {screenshot_path}")
 
         print(f"Returning to homepage_url {homepage_url} to view the ad...")
-        await navigate_and_settle(page, homepage_url, ready_selector="body", dom_timeout=60000, idle_ms=800, max_wait=8000)  # CHANGED
+        await navigate_and_settle(page, homepage_url, ready_selector="body", dom_timeout=DEFAULT_TIMEOUT, idle_ms=800, max_wait=8000)  # CHANGED
 
         print(f"Waiting for {hero_heading_selector} on the homepage...")
         screenshot_index += 1
         await safe_page_screenshot(page, f'{screenshots_directory}{screenshot_index}_homepage_before_heading_selector_screenshot.png', full_page=True)  # CHANGED
-        await wait_for_js_and_element_async(page, hero_heading_selector, timeout=60000)
+        await wait_for_js_and_element_async(page, hero_heading_selector, timeout=DEFAULT_TIMEOUT)
 
         ad_on_hero_content_h1 = await page.locator(hero_heading_selector).inner_text()
         ad_on_hero_content_h1_normalized = ad_on_hero_content_h1.replace("\n", " ").strip()
@@ -244,7 +244,7 @@ async def test_u1st_multiproducts_and_js_errors(
                 await page.click(apply_today_hero_CTA_button_selector)
             new_tab = await popup_info.value
             # Harden new tab wait  # CHANGED
-            await navigate_and_settle(new_tab, new_tab.url, ready_selector="body", dom_timeout=60000, idle_ms=800, max_wait=8000)
+            await navigate_and_settle(new_tab, new_tab.url, ready_selector="body", dom_timeout=DEFAULT_TIMEOUT, idle_ms=800, max_wait=8000)
             screenshot_index += 1
             await safe_page_screenshot(new_tab, f'{screenshots_directory}{screenshot_index}_multiproduct_after_clicked_hero_CTA_link.png', full_page=True)
             await new_tab.close()
@@ -252,7 +252,7 @@ async def test_u1st_multiproducts_and_js_errors(
             pytest.fail("'Apply Today' button was not found or visible on the page.")
 
         print(f"Go to the homepage after clicking the CTA link...")
-        await navigate_and_settle(page, homepage_url, ready_selector="body", dom_timeout=60000, idle_ms=800, max_wait=8000)
+        await navigate_and_settle(page, homepage_url, ready_selector="body", dom_timeout=DEFAULT_TIMEOUT, idle_ms=800, max_wait=8000)
 
         screenshot_index += 1
         await safe_page_screenshot(page, f'{screenshots_directory}{screenshot_index}_multiproduct_after_go_back_to_homepage.png', full_page=True)
@@ -284,7 +284,7 @@ async def test_u1st_multiproducts_and_js_errors(
                 card_CTA_link_full_url = homepage_url_stg_no_api_param + CTA_link_href
                 new_tab = await browser.new_page()
                 print(f"Opening URL in new tab: {card_CTA_link_full_url}")
-                await navigate_and_settle(new_tab, card_CTA_link_full_url, ready_selector="body", dom_timeout=60000, idle_ms=800, max_wait=8000)  # CHANGED
+                await navigate_and_settle(new_tab, card_CTA_link_full_url, ready_selector="body", dom_timeout=DEFAULT_TIMEOUT, idle_ms=800, max_wait=8000)  # CHANGED
                 screenshot_index += 1
                 await safe_page_screenshot(new_tab, f'{screenshots_directory}{screenshot_index}_multiproduct_card_ad{j + 1}_CTA_link_page.png', full_page=True)
                 await new_tab.close()

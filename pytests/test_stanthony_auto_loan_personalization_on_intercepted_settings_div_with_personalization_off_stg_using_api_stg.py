@@ -21,8 +21,8 @@ from qa_tools import (
     wait_for_js_and_element_async,
     detect_js_errors_from_specific_files_async,
     save_page_source_async,
-    browser
-)
+    browser,
+    DEFAULT_TIMEOUT)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -72,14 +72,14 @@ async def test_marketusafcu_auto_loan_personalization_off(
 
     try:
         print(f"Going to homepage_url {homepage_url}...")
-        await page.goto(homepage_url, timeout=60000)
+        await page.goto(homepage_url, timeout=DEFAULT_TIMEOUT)
         await page.screenshot(path=f'{screenshots_directory}/homepage_before_selector_screenshot.png')
 
         print(f"Going to test_scenario_url {test_scenario_url}...")
-        await page.goto(test_scenario_url, timeout=60000)
-        await page.wait_for_load_state('networkidle', timeout=60000)
+        await page.goto(test_scenario_url, timeout=DEFAULT_TIMEOUT)
+        await page.wait_for_load_state('networkidle', timeout=DEFAULT_TIMEOUT)
         # Capture screenshot only after selector is visible to prevent blank page
-        # await page.wait_for_selector(hero_class_selector, timeout=15000)
+        # await page.wait_for_selector(hero_class_selector, timeout=DEFAULT_TIMEOUT)
         # await page.screenshot(path=f'{screenshots_directory}/product_page_for_ad_screenshot.png')
 
         # Capture screenshot only after selector is visible to prevent blank page
@@ -96,7 +96,7 @@ async def test_marketusafcu_auto_loan_personalization_off(
             pytest.fail(f"Timeout waiting for hero_class_selector: {hero_class_selector}")
 
         print(f"Returning to homepage_url {homepage_url} to check that the ad is NOT displayed since personalization is disabled for MarketUSA FCU")
-        await page.goto(homepage_url, timeout=60000)
+        await page.goto(homepage_url, timeout=DEFAULT_TIMEOUT)
 
         # Enable network throttling AFTER initial loads
         client_cdp = await browser.new_cdp_session(page)
@@ -146,7 +146,7 @@ async def test_marketusafcu_auto_loan_personalization_off(
             f"Ad has heading '{ad_on_hero_content_h1_normalized}' but expected heading was '{expected_heading}'"
         )
 
-        await page.screenshot(path=f'{screenshots_directory}/hero_ad1_screenshot.png', timeout=60000)
+        await page.screenshot(path=f'{screenshots_directory}/hero_ad1_screenshot.png', timeout=DEFAULT_TIMEOUT)
 
         html_content = await page.content()
         desired_cloudfront_urls = (html_finalytics_stg_cloudfront, html_finalytics_stg_cloudfront2)

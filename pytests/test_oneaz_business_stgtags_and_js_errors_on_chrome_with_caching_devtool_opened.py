@@ -18,8 +18,8 @@ from qa_tools import (
     wait_for_js_and_element_async,
     detect_js_errors_from_specific_files_async,
     save_page_source_async,
-    browser
-)
+    browser,
+    DEFAULT_TIMEOUT)
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "browser",
@@ -64,9 +64,9 @@ async def test_oneaz_stgtags_and_js_errors(
 
     try:
         print(f"Going to homepage_url {homepage_url}...")
-        await page.goto(homepage_url, timeout=60000)
-        await page.wait_for_load_state("domcontentloaded", timeout=60000)
-        await page.wait_for_load_state("load", timeout=60000)
+        await page.goto(homepage_url, timeout=DEFAULT_TIMEOUT)
+        await page.wait_for_load_state("domcontentloaded", timeout=DEFAULT_TIMEOUT)
+        await page.wait_for_load_state("load", timeout=DEFAULT_TIMEOUT)
         await page.wait_for_function('document.readyState === "complete"')
         time.sleep(10)
         #INCREASE SLEEP TO CAPTURE SCREENSHOT OF THE CONSOLE WINDOW
@@ -81,7 +81,7 @@ async def test_oneaz_stgtags_and_js_errors(
         # Open the "View Source" page only if not using webkit since not valid URL format for webkit
         view_source_url = f"view-source:{homepage_url}"
         if browser_type != "webkit":
-            await page.goto(view_source_url, timeout=60000)
+            await page.goto(view_source_url, timeout=DEFAULT_TIMEOUT)
             # Take a screenshot of the "View Source" page
             await page.screenshot(path=f'{screenshots_directory}/homepage_source_screenshot.png')
             print("Screenshot with source code taken for browsers except webkit browser engine used by Safari.")
@@ -92,9 +92,9 @@ async def test_oneaz_stgtags_and_js_errors(
         await detect_js_errors_from_specific_files_async(client, page, specific_js_files, error_tracker, screenshots_directory)
 
         print(f"Going to test_scenario_url {test_scenario_url}...")
-        await page.goto(test_scenario_url, timeout=60000)
-        await page.wait_for_load_state('domcontentloaded', timeout=60000)
-        await page.wait_for_load_state('load', timeout=60000)
+        await page.goto(test_scenario_url, timeout=DEFAULT_TIMEOUT)
+        await page.wait_for_load_state('domcontentloaded', timeout=DEFAULT_TIMEOUT)
+        await page.wait_for_load_state('load', timeout=DEFAULT_TIMEOUT)
         await page.wait_for_function('document.readyState === "complete"')
         time.sleep(10)
 
@@ -107,9 +107,9 @@ async def test_oneaz_stgtags_and_js_errors(
         await detect_js_errors_from_specific_files_async(client, page, specific_js_files, error_tracker, screenshots_directory)
 
         print(f"Returning to homepage_url {homepage_url} to view the ad...")
-        await page.goto(homepage_url, timeout=60000)
-        await page.wait_for_load_state('load', timeout=60000)
-        await page.wait_for_load_state('domcontentloaded', timeout=60000)
+        await page.goto(homepage_url, timeout=DEFAULT_TIMEOUT)
+        await page.wait_for_load_state('load', timeout=DEFAULT_TIMEOUT)
+        await page.wait_for_load_state('domcontentloaded', timeout=DEFAULT_TIMEOUT)
         await page.wait_for_function('document.readyState === "complete"')
         time.sleep(10)
 
@@ -120,8 +120,8 @@ async def test_oneaz_stgtags_and_js_errors(
         # CHANGED: Take ONLY the #homeSlider section screenshot and name it hero_ad_only
         # ---------------------------------------------
         print("Waiting for #homeSlider on the homepage...")  # CHANGED
-        await wait_for_js_and_element_async(page, "#homeSlider", timeout=60000)  # CHANGED
-        await page.wait_for_selector("#homeSlider", state='visible', timeout=60000)  # CHANGED
+        await wait_for_js_and_element_async(page, "#homeSlider", timeout=DEFAULT_TIMEOUT)  # CHANGED
+        await page.wait_for_selector("#homeSlider", state='visible', timeout=DEFAULT_TIMEOUT)  # CHANGED
 
         # CHANGED: Capture only the targeted section instead of full-page
         await page.locator("#homeSlider").screenshot(  # CHANGED
@@ -131,8 +131,8 @@ async def test_oneaz_stgtags_and_js_errors(
         # ---------------------------------------------
 
         # (Optional keep) Validate the text still if desired
-        await wait_for_js_and_element_async(page, hero_heading_selector, timeout=60000)
-        await page.wait_for_selector(hero_heading_selector, state='visible', timeout=60000)
+        await wait_for_js_and_element_async(page, hero_heading_selector, timeout=DEFAULT_TIMEOUT)
+        await page.wait_for_selector(hero_heading_selector, state='visible', timeout=DEFAULT_TIMEOUT)
         ad_heading = await page.locator(hero_heading_selector).inner_text()
         # Instead of comparing the heading, compare the images in folder BASELINE/hero_ad_only_baseline.png with the current /hero_ad_only.png using OCR
         if expected_heading != ad_heading:

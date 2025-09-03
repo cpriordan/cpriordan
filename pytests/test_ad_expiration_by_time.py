@@ -10,8 +10,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from qa_tools import (
     clear_screenshots_directory,
     wait_for_js_and_element_async,
-    browser_no_auth
-)
+    browser_no_auth,
+    DEFAULT_TIMEOUT)
 from playwright.async_api import async_playwright
 
 @pytest.mark.asyncio

@@ -22,8 +22,8 @@ from qa_tools import (
     wait_for_js_and_element_async,
     detect_js_errors_from_specific_files_async,
     save_page_source_async,
-    browser
-)
+    browser,
+    DEFAULT_TIMEOUT)
 
 async def wait_for_network_quiet(page, idle_ms: int = 1200, max_wait: int = 15000):
     loop = asyncio.get_event_loop()
@@ -166,13 +166,13 @@ async def test_tru_multiproduct_two_card_ads_no_js_errors(
     try:
         for product_name, product_url in islice(product_urls.items(), 1):
             print(f"Visiting product URL: {product_name} - {product_url}")
-            await page.goto(product_url, wait_until='domcontentloaded', timeout=60000)
+            await page.goto(product_url, wait_until='domcontentloaded', timeout=DEFAULT_TIMEOUT)
             await wait_for_network_quiet(page)
             screenshot_index += 1
             await save_pdf(page, f"{screenshots_directory}{screenshot_index}_{product_name}.pdf")
 
         # Validate hero heading text robustly (now using polling-based wait)  ⟵ CHANGED
-        await wait_for_attached_and_nonempty(page, hero_heading_selector, timeout=60000)
+        await wait_for_attached_and_nonempty(page, hero_heading_selector, timeout=DEFAULT_TIMEOUT)
         raw_text = await extract_text_like(page, hero_heading_selector)
         norm = raw_text.replace("\n", " ").strip().upper()
         print(f"---> Heading of Ad is *** {norm} ***")

@@ -19,8 +19,8 @@ from qa_tools import (
     wait_for_js_and_element_async,
     detect_js_errors_from_specific_files_async,
     save_page_source_async,
-    browser
-)
+    browser,
+    DEFAULT_TIMEOUT)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -59,7 +59,7 @@ async def test_tru_mortgage_rates_stgtags_and_js_errors(
 
     try:
         print(f"Going to homepage_url {homepage_url}...")
-        await page.goto(homepage_url, timeout=30000)  # Increased timeout
+        await page.goto(homepage_url, timeout=DEFAULT_TIMEOUT)  # Increased timeout
         try:
             await page.wait_for_load_state('networkidle', timeout=9000)
         except PlaywrightTimeoutError:
@@ -79,7 +79,7 @@ async def test_tru_mortgage_rates_stgtags_and_js_errors(
 
         # ADD GOING TO RATES PAGE BEFORE GOING TO SCENARIO PAGE
         print(f"Going to mortgage_rates_url {mortgage_rates_url}...")
-        await page.goto(mortgage_rates_url, timeout=30000)  # Increased timeout
+        await page.goto(mortgage_rates_url, timeout=DEFAULT_TIMEOUT)  # Increased timeout
         await page.wait_for_load_state('domcontentloaded', timeout=10000)
         try:
             await page.evaluate("() => document.fonts.ready")

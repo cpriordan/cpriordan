@@ -23,8 +23,8 @@ from qa_tools import (
     wait_for_js_and_element_async,
     detect_js_errors_from_specific_files_async,
     save_page_source_async,
-    browser
-)
+    browser,
+    DEFAULT_TIMEOUT)
 
 async def validate_no_server_error(page):
     """
@@ -146,12 +146,12 @@ async def test_ssscu_multiproduct_and_js_errors(
 
     try:
         print(f"Going to homepage_url {homepage_url}...")
-        await page.goto(homepage_url, timeout=60000)
+        await page.goto(homepage_url, timeout=DEFAULT_TIMEOUT)
         try:
             await page.wait_for_load_state('networkidle', timeout=90000)
         except PlaywrightTimeoutError:
             print("Network idle timed out, falling back to domcontentloaded")
-            await page.wait_for_load_state('domcontentloaded', timeout=30000)
+            await page.wait_for_load_state('domcontentloaded', timeout=DEFAULT_TIMEOUT)
         screenshot_index += 1 # Increment the screenshot index
         await page.screenshot(path=f'{screenshots_directory}{screenshot_index}_homepage_screenshot.png')
 
@@ -161,12 +161,12 @@ async def test_ssscu_multiproduct_and_js_errors(
             if not isinstance(product_url, str):
                 pytest.fail(f"Unsupported value in 'product_urls': {product_name} -> {product_url}")
             print(f"Visiting product URL: {product_name} - {product_url}")
-            await page.goto(product_url, timeout=60000)
+            await page.goto(product_url, timeout=DEFAULT_TIMEOUT)
             try:
                 await page.wait_for_load_state('networkidle', timeout=90000)
             except PlaywrightTimeoutError:
                 print("Network idle timed out, falling back to domcontentloaded")
-                await page.wait_for_load_state('domcontentloaded', timeout=30000)
+                await page.wait_for_load_state('domcontentloaded', timeout=DEFAULT_TIMEOUT)
 
             # Increment the screenshot index
             screenshot_index += 1
@@ -175,18 +175,18 @@ async def test_ssscu_multiproduct_and_js_errors(
             print(f"Screenshot saved: {screenshot_path}")
 
         print(f"Returning to homepage_url {homepage_url} to view the ad...")
-        await page.goto(homepage_url, timeout=60000)
+        await page.goto(homepage_url, timeout=DEFAULT_TIMEOUT)
         try:
             await page.wait_for_load_state('networkidle', timeout=90000)
         except PlaywrightTimeoutError:
             print("Network idle timed out, falling back to domcontentloaded")
-            await page.wait_for_load_state('domcontentloaded', timeout=30000)
+            await page.wait_for_load_state('domcontentloaded', timeout=DEFAULT_TIMEOUT)
 
         print(f"Waiting for {hero_heading_selector} on the homepage...")
         # Increment the screenshot index
         screenshot_index += 1
         await page.screenshot(path=f'{screenshots_directory}{screenshot_index}_homepage_before_heading_selector_screenshot.png')
-        await wait_for_js_and_element_async(page, hero_heading_selector, timeout=60000)
+        await wait_for_js_and_element_async(page, hero_heading_selector, timeout=DEFAULT_TIMEOUT)
 
         # Strip any white space in the heading
         ad_on_hero_content_h1 = await page.locator(hero_heading_selector).inner_text()
@@ -196,7 +196,7 @@ async def test_ssscu_multiproduct_and_js_errors(
         f"Ad has heading '{ad_on_hero_content_h1_normalized}' but expected heading was '{auto_loan_expected_heading}'")
         # Increment the screenshot index
         screenshot_index += 1
-        await page.screenshot(path=f'{screenshots_directory}{screenshot_index}_multiproduct_hero_ad1_screenshot_and_accept_cookie.png', timeout=60000)
+        await page.screenshot(path=f'{screenshots_directory}{screenshot_index}_multiproduct_hero_ad1_screenshot_and_accept_cookie.png', timeout=DEFAULT_TIMEOUT)
 
         print(f"---> About to check if there is an accept cookie locator")
         # Handle cookie consent if the button is visible
@@ -208,7 +208,7 @@ async def test_ssscu_multiproduct_and_js_errors(
                 await page.wait_for_load_state('networkidle', timeout=90000)
             except PlaywrightTimeoutError:
                 print("Network idle timed out, falling back to domcontentloaded")
-                await page.wait_for_load_state('domcontentloaded', timeout=30000)
+                await page.wait_for_load_state('domcontentloaded', timeout=DEFAULT_TIMEOUT)
 
             print("Cookie Accept consent button clicked and loading the page...")
         else:
@@ -219,18 +219,18 @@ async def test_ssscu_multiproduct_and_js_errors(
 
         # Screenshot after clicking the accept cookie button if visible
         screenshot_index += 1
-        await page.screenshot(path=f'{screenshots_directory}{screenshot_index}_multiproduct_hero_after_accept_cookie.png', timeout=60000)
+        await page.screenshot(path=f'{screenshots_directory}{screenshot_index}_multiproduct_hero_after_accept_cookie.png', timeout=DEFAULT_TIMEOUT)
 
         # Click the "Apply Today" button and handle the new tab
         if await page.is_visible(apply_today_hero_CTA_button_selector):
             print("Clicking the 'Apply Today' button...")
             await page.click(apply_today_hero_CTA_button_selector)
-            # await page.wait_for_load_state('load', timeout=60000)
+            # await page.wait_for_load_state('load', timeout=DEFAULT_TIMEOUT)
             try:
                 await page.wait_for_load_state('networkidle', timeout=90000)
             except PlaywrightTimeoutError:
                 print("Network idle timed out, falling back to domcontentloaded")
-                await page.wait_for_load_state('domcontentloaded', timeout=30000)
+                await page.wait_for_load_state('domcontentloaded', timeout=DEFAULT_TIMEOUT)
 
             print("Waited for page to load after clicking the CTA link")
 
@@ -242,7 +242,7 @@ async def test_ssscu_multiproduct_and_js_errors(
             screenshot_index += 1
             screenshot_path = os.path.join(screenshots_directory, "CTA_page_screenshot.png")
             await page.screenshot(path=f'{screenshots_directory}{screenshot_index}_multiproduct_after_clicked_hero_CTA_link.png',
-                    timeout=60000)
+                    timeout=DEFAULT_TIMEOUT)
             print(f"Screenshot of the opened page saved at {screenshot_path}")
 
         else:
@@ -250,19 +250,19 @@ async def test_ssscu_multiproduct_and_js_errors(
 
          # Go back to the main page after clicking the CTA
         print(f"Go to the homepage after clicking the CTA link...")
-        await page.goto(homepage_url, timeout=60000)
+        await page.goto(homepage_url, timeout=DEFAULT_TIMEOUT)
         try:
             await page.wait_for_load_state('networkidle', timeout=90000)
         except PlaywrightTimeoutError:
             print("Network idle timed out, falling back to domcontentloaded")
-            await page.wait_for_load_state('domcontentloaded', timeout=30000)
+            await page.wait_for_load_state('domcontentloaded', timeout=DEFAULT_TIMEOUT)
 
-        # await page.wait_for_load_state('load', timeout=60000)
+        # await page.wait_for_load_state('load', timeout=DEFAULT_TIMEOUT)
 
         # Screenshot after going back to the homepage
         screenshot_index += 1
         await page.screenshot(path=f'{screenshots_directory}{screenshot_index}_multiproduct_after_go_back_to_homepage.png',
-                              timeout=60000)
+                              timeout=DEFAULT_TIMEOUT)
 
         # Scroll down until the card ads are visible
         for selector in card_ad_selectors:
@@ -272,7 +272,7 @@ async def test_ssscu_multiproduct_and_js_errors(
             await first_instance.wait_for(state="visible", timeout=10000)
             screenshot_index += 1
             await page.screenshot(path=f'{screenshots_directory}{screenshot_index}_multiproduct_after_page_scroll.png',
-                    timeout=60000)
+                    timeout=DEFAULT_TIMEOUT)
             print(f"Screenshot after scrolling to the card ad at {screenshot_path}")
 
         # Get the h2 headings of the card ads in class and compare against expected h2 heading
@@ -374,15 +374,15 @@ async def test_ssscu_multiproduct_and_js_errors(
                 # await new_tab.wait_for_load_state("networkidle")
 
                 print(f"Opening URL in new tab: {card_CTA_link_full_url}")
-                # await new_tab.goto(card_CTA_link_full_url, wait_until="domcontentloaded", timeout=60000)
-                await new_tab.goto(card_CTA_link_full_url, wait_until="networkidle", timeout=60000)
+                # await new_tab.goto(card_CTA_link_full_url, wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT)
+                await new_tab.goto(card_CTA_link_full_url, wait_until="networkidle", timeout=DEFAULT_TIMEOUT)
 
                 # COMMENT OUT FOR NOW TO CHECK THAT THE SCREENSHOTS ARE TAKEN
                 # await validate_no_server_error(new_tab)
                 screenshot_index += 1
                 await new_tab.screenshot(
                     path=f'{screenshots_directory}{screenshot_index}_multiproduct_card_ad{j + 1}_CTA_link_page.png',
-                    timeout=60000)
+                    timeout=DEFAULT_TIMEOUT)
 
             except Exception as e:
                 pytest.fail(f"Failed to validate card ad CTA link {j + 1}: {e}")

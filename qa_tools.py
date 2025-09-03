@@ -9,8 +9,11 @@ from playwright.async_api import async_playwright, expect as async_expect, Timeo
 from pyotp import TOTP
 from dotenv import load_dotenv
 
+# Load environment variables
+load_dotenv()
 
-
+# Global timeout configuration
+DEFAULT_TIMEOUT = int(os.getenv('DEFAULT_TIMEOUT', 10000))
 
 def clear_screenshots_directory(directory):
     """Clear screenshots directory, removing all files and recreating it."""
@@ -514,10 +517,12 @@ async def detect_js_errors_from_specific_files_async(client, page, specific_file
         setattr(page, "_js_error_handler_set", True)
 
 
-def wait_for_js_and_element_sync(page, hero_heading_selector, timeout=60000):
+def wait_for_js_and_element_sync(page, hero_heading_selector, timeout=None):
     """
     Wait for page load and element visibility (sync version for fin-tests).
     """
+    if timeout is None:
+        timeout = DEFAULT_TIMEOUT
     
     try:
         page.evaluate('''new Promise(resolve => {
@@ -542,10 +547,12 @@ def wait_for_js_and_element_sync(page, hero_heading_selector, timeout=60000):
         print(f"Timeout waiting for element: {hero_heading_selector}")
 
 
-async def wait_for_js_and_element_async(page, hero_heading_selector, timeout=10000):
+async def wait_for_js_and_element_async(page, hero_heading_selector, timeout=None):
     """
     Wait for page load and element visibility (async version for fin-tests).
     """
+    if timeout is None:
+        timeout = DEFAULT_TIMEOUT
     
     try:
         print("Waiting for the document to be fully loaded...")

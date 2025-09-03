@@ -103,6 +103,7 @@ Admin tests require environment variables (typically in .env file):
 - `FINDATA_GOCU_PW`: Admin password  
 - `FINDATA_GOCU_OTP`: TOTP secret for 2FA
 - `TEST_ENVIRONMENT`: Target environment (stg/prod)
+- `DEFAULT_TIMEOUT`: Global timeout in milliseconds (default: 10000)
 
 ### Screenshot Management
 
@@ -131,6 +132,20 @@ Workflow patterns:
 - Screenshot directories are cleared before each test run to manage disk space
 - Admin tests use TOTP-based 2FA requiring accurate time sync
 - OCR tests compare visual output against baseline images
+
+### Test Parameter Integrity
+
+**CRITICAL**: Do not modify test parameter values (URLs, expected headings, selectors, etc.) just to make tests pass. Test failures often indicate:
+- Content changes that need investigation
+- Environment issues requiring attention
+- Actual bugs in the application under test
+
+Only change test parameters when:
+- Explicitly instructed to do so
+- The change reflects an intentional application update
+- Working on a specific content assertion fix that's been requested
+
+Tests are designed to fail when something is wrong - this is their primary value proposition.
 
 ## Serana MCP Integration
 

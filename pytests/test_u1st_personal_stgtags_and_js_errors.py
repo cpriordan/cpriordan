@@ -19,8 +19,8 @@ from qa_tools import (
     wait_for_js_and_element_async,
     detect_js_errors_from_specific_files_async,
     save_page_source_async,
-    browser
-)
+    browser,
+    DEFAULT_TIMEOUT)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -60,35 +60,35 @@ async def test_u1st_personal_stgtags_and_js_errors(
 
     try:
         print(f"Going to homepage_url {homepage_url}...")
-        await page.goto(homepage_url, timeout=60000)
+        await page.goto(homepage_url, timeout=DEFAULT_TIMEOUT)
         try:
             await page.wait_for_load_state('networkidle', timeout=90000)
         except PlaywrightTimeoutError:
             print("Network idle timed out, falling back to domcontentloaded")
-            await page.wait_for_load_state('domcontentloaded', timeout=30000)
-        # await page.wait_for_load_state('domcontentloaded', timeout=60000)
-        # await page.wait_for_load_state('load', timeout=60000)
+            await page.wait_for_load_state('domcontentloaded', timeout=DEFAULT_TIMEOUT)
+        # await page.wait_for_load_state('domcontentloaded', timeout=DEFAULT_TIMEOUT)
+        # await page.wait_for_load_state('load', timeout=DEFAULT_TIMEOUT)
         # time.sleep(15)
         await page.screenshot(path=f'{screenshots_directory}/homepage_screenshot.png')
 
         print(f"Going to test_scenario_url {test_scenario_url}...")
-        await page.goto(test_scenario_url, timeout=60000)
+        await page.goto(test_scenario_url, timeout=DEFAULT_TIMEOUT)
         # await page.wait_for_load_state('networkidle', timeout=90000)
         await page.wait_for_load_state('domcontentloaded', timeout=90000)
-        # await page.wait_for_load_state('load', timeout=60000)
+        # await page.wait_for_load_state('load', timeout=DEFAULT_TIMEOUT)
         # time.sleep(15)
-        # await page.wait_for_load_state('networkidle', timeout=60000)
+        # await page.wait_for_load_state('networkidle', timeout=DEFAULT_TIMEOUT)
         await page.screenshot(path=f'{screenshots_directory}/product_page_for_ad_screenshot.png')
 
         print(f"Returning to homepage_url {homepage_url} to view the ad...")
-        await page.goto(homepage_url, timeout=60000)
+        await page.goto(homepage_url, timeout=DEFAULT_TIMEOUT)
         try:
             await page.wait_for_load_state('networkidle', timeout=90000)
         except PlaywrightTimeoutError:
             print("Network idle timed out, falling back to domcontentloaded")
-            await page.wait_for_load_state('domcontentloaded', timeout=30000)
-        # await page.wait_for_load_state('load', timeout=60000)
-        # await page.wait_for_load_state('domcontentloaded', timeout=60000)
+            await page.wait_for_load_state('domcontentloaded', timeout=DEFAULT_TIMEOUT)
+        # await page.wait_for_load_state('load', timeout=DEFAULT_TIMEOUT)
+        # await page.wait_for_load_state('domcontentloaded', timeout=DEFAULT_TIMEOUT)
         # time.sleep(20)
         print(f"Waiting for {hero_heading_selector} on the homepage...")
         await page.screenshot(path=f'{screenshots_directory}/homepage_before_selector_screenshot.png')

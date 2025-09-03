@@ -18,9 +18,10 @@ from qa_tools import (
     setup_screenshots_directory,
     get_common_js_files,
     get_common_finalytics_tags,
-    browser)
+    browser,
+    DEFAULT_TIMEOUT)
 
-async def wait_for_js_and_element(page, hero_heading_selector, timeout=40000):
+async def wait_for_js_and_element(page, hero_heading_selector, timeout=DEFAULT_TIMEOUT):
     """
     Waits for the document to be fully loaded and for a specific element to become visible.
     """
@@ -77,31 +78,31 @@ async def test_swfcu_rvboatloan_stgtags_and_js_errors(
 
     try:
         print(f"Going to homepage_url {homepage_url}...")
-        await page.goto(homepage_url, timeout=60000)
-        await page.wait_for_load_state('networkidle', timeout=60000)
-        # await page.wait_for_load_state('domcontentloaded', timeout=60000)
-        # await page.wait_for_load_state('load', timeout=60000)
+        await page.goto(homepage_url, timeout=DEFAULT_TIMEOUT)
+        await page.wait_for_load_state('networkidle', timeout=DEFAULT_TIMEOUT)
+        # await page.wait_for_load_state('domcontentloaded', timeout=DEFAULT_TIMEOUT)
+        # await page.wait_for_load_state('load', timeout=DEFAULT_TIMEOUT)
         # time.sleep(15)
         await page.screenshot(path=f'{screenshots_directory}/homepage_screenshot.png')
 
         print(f"Going to test_scenario_url {test_scenario_url}...")
-        await page.goto(test_scenario_url, timeout=60000)
-        await page.wait_for_load_state('networkidle', timeout=60000)
-        # await page.wait_for_load_state('domcontentloaded', timeout=60000)
-        # await page.wait_for_load_state('load', timeout=60000)
+        await page.goto(test_scenario_url, timeout=DEFAULT_TIMEOUT)
+        await page.wait_for_load_state('networkidle', timeout=DEFAULT_TIMEOUT)
+        # await page.wait_for_load_state('domcontentloaded', timeout=DEFAULT_TIMEOUT)
+        # await page.wait_for_load_state('load', timeout=DEFAULT_TIMEOUT)
         # time.sleep(15)
-        # await page.wait_for_load_state('networkidle', timeout=60000)
+        # await page.wait_for_load_state('networkidle', timeout=DEFAULT_TIMEOUT)
         await page.screenshot(path=f'{screenshots_directory}/product_page_for_ad_screenshot.png')
 
         print(f"Returning to homepage_url {homepage_url} to view the ad...")
-        await page.goto(homepage_url, timeout=60000)
-        await page.wait_for_load_state('networkidle', timeout=60000)
-        # await page.wait_for_load_state('load', timeout=60000)
-        # await page.wait_for_load_state('domcontentloaded', timeout=60000)
+        await page.goto(homepage_url, timeout=DEFAULT_TIMEOUT)
+        await page.wait_for_load_state('networkidle', timeout=DEFAULT_TIMEOUT)
+        # await page.wait_for_load_state('load', timeout=DEFAULT_TIMEOUT)
+        # await page.wait_for_load_state('domcontentloaded', timeout=DEFAULT_TIMEOUT)
         # time.sleep(20)
         print(f"Waiting for {hero_heading_selector} on the homepage...")
         await page.screenshot(path=f'{screenshots_directory}/homepage_before_selector_screenshot.png')
-        await wait_for_js_and_element_async(page, hero_heading_selector, timeout=60000)
+        await wait_for_js_and_element_async(page, hero_heading_selector, timeout=DEFAULT_TIMEOUT)
         await page.screenshot(path=f'{screenshots_directory}/hero_ad1_screenshot.png')
 
         ad_heading = await page.locator(hero_heading_selector).inner_text()
