@@ -1,52 +1,32 @@
 import os
-import shutil
 import pytest
-import re
 import time
-# from playwright.sync_api import sync_playwright, expect
 import asyncio
 from playwright.async_api import async_playwright, expect
-from pyotp import TOTP
-from dotenv import load_dotenv
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
+from qa_tools import (
+    AdminLoginPage, 
+    setup_admin_test_environment,
+    validate_admin_no_server_error_async
+)
 
-class LoginPage:
-    def __init__(self, page):
-        self.page = page
-
-    async def navigate(self):
-        await self.page.goto(f'https://{test_env}finalyticsdata.com/account/login/?next=/')
-
-
-    async def login(self, username, password):
-        await self.page.get_by_label("Username:").click()
-        await self.page.get_by_label("Username:").fill(username)
-        await self.page.wait_for_timeout(300)
-        await self.page.get_by_label("Password").fill(password)
-        await self.page.wait_for_timeout(300)
-        await self.page.get_by_role("button", name="Login").click()
-        await self.page.wait_for_load_state("networkidle")
-
-
-    async def enter_2fa_code(self):
-        otp_input = self.page.locator('#id_token-otp_token')
-        await self.page.wait_for_selector('#id_token-otp_token', timeout=60000)
-        await self.page.wait_for_timeout(300)
-        await otp_input.wait_for(state="visible", timeout=30000)
-        # Before filling out the TOTP code, check the remaining time and generate a fresh one if needed
-        remaining_time = totp.interval - (int(time.time()) % totp.interval)
-        if remaining_time < 5:  # Generate a fresh TOTP if less than 5 seconds remain
-            # time.sleep(remaining_time + 1)
-            await asyncio.sleep(remaining_time + 1)
-        otp_code = totp.now()
-        # otp_input.fill(otp_code)
-        # self.page.wait_for_timeout(300)
-        await otp_input.fill(otp_code)
-        await self.page.wait_for_timeout(300)
-        print(f"OTP code {otp_code} entered.")
-
-
-    async def take_screenshot(self, path):
-        await self.page.screenshot(path=path)
+async def clear_screenshots_directory(directory):
+    """Clear screenshots directory for async tests."""
+    import shutil
+    if os.path.exists(directory):
+        for filename in os.listdir(directory):
+            file_path = os.path.join(directory, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print(f"Failed to delete {file_path}. Reason: {e}")
+    else:
+        os.makedirs(directory)
 
 class MediaLibraryPage:
     def __init__(self, page):
@@ -557,144 +537,97 @@ class AssetsPage:
 
         await page.screenshot(path=f'{screenshots_directory}26_after_successful_image_deletion.png')
 
-# Load environment variables from .env
-load_dotenv()
-
-# Validate environment variables
-findata_user = os.environ.get("FINDATA_VYS_USER")
-findata_pw = os.environ.get("FINDATA_VYS_PW")
-findata_otp = os.environ.get("FINDATA_VYS_OTP")
-test_env = os.environ.get("TEST_ENVIRONMENT")
-
-if not findata_user or not findata_pw or not findata_otp or not test_env:
-    raise ValueError("Required environment variables FINDATA_VYS_USER, FINDATA_VYS_PW, FINDATA_VYS_OTP or TEST_ENVIRONMENT are not set!")
-
-# Configure TOTP using pyotp
-totp = TOTP(findata_otp, interval=30, digits=6, digest="sha1")
-
-@pytest.fixture(scope="function")
-async def browser_context():
-    """Fixture to set up and tear down the Playwright browser context."""
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=False)
-        context = await browser.new_context()
-        yield context
-        await context.close()
-        await browser.close()
-
-
-def generate_otp_code():
-    import time
-    remaining_time = totp.interval - (int(time.time()) % totp.interval)
-    if remaining_time < 5:
-        # short pause so the token rolls over
-        # from playwright.sync_api import sync_playwright
-        time.sleep(remaining_time + 1)
-    return totp.now()
-
-async def validate_no_server_error(page, screenshots_directory):
-    """
-    Validates that the page does not contain server error messages.
-
-    Args:
-        page: The Playwright page object.
-    """
-    error_keywords = ["Server Error", "(500)", "error", "Page not found"]
-    page_text = await page.text_content("body")
-    found_errors = [msg for msg in error_keywords if msg in page_text]
-    # await page.screenshot(path=f'{screenshots_directory}15_after_saved_asset_with_success_message.png')
-    assert not found_errors, "Error messages found on the page: " + ", ".join(found_errors)
 
 
 @pytest.mark.asyncio
-# async def test_media_library_addition_and_deletion_of_images(browser_context):
 async def test_media_library_addition_and_deletion_of_images():
+    """Test media library functionality using consolidated qa_tools functions."""
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
-        context = await browser.new_context()  # Create an isolated browser context
-        page = await context.new_page()  # Open a new page (tab)
-        # page = browser_context.new_page()
-        # page = await browser_context.new_page()
-        login_page = LoginPage(page)
-        media_library_page = MediaLibraryPage(page)
-        assets_page = AssetsPage(page)
-
-        # The image car_image.jpg must exist in the Downloads folder to work or adjust the patch with NAME car_image and NOT car_image.jpg since format is .jpg
-        # CHANGE LOCAL FILE PATH TO ABSOLUTE
-        # local_image_to_upload = '/Downloads/car_image.jpg'
-        # local_image_to_upload = "C:\\Users\\c_p_r\\Downloads\\car_image" # NO .jpg as FILENAME since .jpg is the img format
-        # ANOTHER POSSIBLE NON-HARDCODED PATH
-        local_image_to_upload = os.path.join(os.environ["USERPROFILE"], "Downloads", "car_image.jpg")
-        screenshots_directory = 'screenshots_adminsite_using_pytest/media_library/'
-        await clear_screenshots_directory(screenshots_directory)
-        print(f"Cleared screenshots directory {screenshots_directory}.")
-
-        # Perform login steps
-        await login_page.navigate()
-        print(f"About to login...")
-        await login_page.login(findata_user, findata_pw)
-
-        await login_page.enter_2fa_code()
-        await page.get_by_role("button", name="Login").click()
-
-        await login_page.take_screenshot(f'{screenshots_directory}1_successful_login_using_2fa.png')
-
-        current_url = page.url
-        print(f"Current URL after login is {current_url}.")
-        expect(page).to_have_url(f'https://{test_env}finalyticsdata.com/')
-
-
-        # Navigate to media library after login
-        await media_library_page.navigate_to_media_library(screenshots_directory)
-        await media_library_page.click_add_new_asset_button(screenshots_directory)
-
+        import os
+        headless = os.environ.get("HEADLESS", "false").lower() == "true"
+        browser = await p.chromium.launch(headless=headless)
+        context = await browser.new_context()
+        page = await context.new_page()
+        
         try:
-            await media_library_page.upload_img_file(local_image_to_upload, screenshots_directory)
-            await page.screenshot(path=f'{screenshots_directory}10_after_img_upload.png')
-            print(f"Uploaded a local image...")
-        except Exception as e:
-            print(f"Error uploading local image {local_image_to_upload}: {e}")
+            # Setup environment using consolidated function
+            findata_user, findata_pw, findata_otp, test_env, totp, base_screenshots_dir = setup_admin_test_environment('vys')
+            
+            # File path for image upload
+            local_image_to_upload = os.path.join(os.environ["USERPROFILE"], "Downloads", "car_image.jpg")
+            screenshots_directory = 'screenshots_adminsite_using_pytest/media_library/'
+            await clear_screenshots_directory(screenshots_directory)
+            print(f"Cleared screenshots directory {screenshots_directory}.")
+            
+            # Initialize consolidated login page and page objects
+            login_page = AdminLoginPage(page, is_async=True)
+            media_library_page = MediaLibraryPage(page)
+            assets_page = AssetsPage(page)
+            
+            # Perform login using consolidated async methods
+            await login_page.navigate(test_env)
+            print(f"About to login...")
+            await login_page.login(findata_user, findata_pw)
+            
+            await login_page.enter_2fa_code(totp)
+            await page.get_by_role("button", name="Login").click()
+            
+            await login_page.take_screenshot(f'{screenshots_directory}1_successful_login_using_2fa.png')
+            
+            current_url = page.url
+            print(f"Current URL after login is {current_url}.")
+            expect(page).to_have_url(f'https://{test_env}finalyticsdata.com/')
 
-        # Pause for 10 seconds
-        print("Pause for a few seconds before clicking continue to allow time for continue button to get activated")
-        time.sleep(15)
+            # Navigate to media library after login
+            await media_library_page.navigate_to_media_library(screenshots_directory)
+            await media_library_page.click_add_new_asset_button(screenshots_directory)
 
-        # Click Continue
-        await media_library_page.click_continue_button(screenshots_directory)
-        print(f"Continue button clicked after image upload")
-        # await media_library_page.take_screenshot(f'{screenshots_directory}13_continue_after_img_upload.png')
-        await media_library_page.click_save_asset_button(screenshots_directory)
-        print(f"Save Asset was clicked")
-        # await media_library_page.take_screenshot(f'{screenshots_directory}14_after_saved_asset.png')
+            try:
+                await media_library_page.upload_img_file(local_image_to_upload, screenshots_directory)
+                await page.screenshot(path=f'{screenshots_directory}10_after_img_upload.png')
+                print(f"Uploaded a local image...")
+            except Exception as e:
+                print(f"Error uploading local image {local_image_to_upload}: {e}")
 
-        # **Check for success message after clicking Save Asset
-        success_message_locator = page.locator("#alert-msg > strong:nth-child(1)")
-        await expect(success_message_locator).to_contain_text("New Asset Created!")
-        print("Verified success message appeared after saving asset.")
+            # Pause for 10 seconds
+            print("Pause for a few seconds before clicking continue to allow time for continue button to get activated")
+            await asyncio.sleep(15)
 
-        # Check that the page does not have any internal server error or any error message
-        await validate_no_server_error(page, screenshots_directory)
-        print(f"Page was validated to not have any errors after image upload")
-        await page.screenshot(path=f'{screenshots_directory}15_SUCCESS_new_asset_created_and_stored_on_S3_bucket.png')
+            # Click Continue
+            await media_library_page.click_continue_button(screenshots_directory)
+            print(f"Continue button clicked after image upload")
+            await media_library_page.click_save_asset_button(screenshots_directory)
+            print(f"Save Asset was clicked")
 
-        # Somehow, the cu_id used is "caribefederal" when navigate to Easterly assets page after selecting Easterly on stg so  HARD CODE TO USE THE cu_id for vys using URL
-        stg_easterly_assets_link_url = "https://stgfinalyticsdata.com/admin/app/asset/?company__id__exact=18619&cu_id=vys"
-        await page.goto(stg_easterly_assets_link_url)
-        print(f"Navigated to stg_easterly_assets_link_url " + stg_easterly_assets_link_url)
+            # Check for success message after clicking Save Asset
+            success_message_locator = page.locator("#alert-msg > strong:nth-child(1)")
+            await expect(success_message_locator).to_contain_text("New Asset Created!")
+            print("Verified success message appeared after saving asset.")
 
-        # Delete the newly uploaded image for clean-up
-        # await assets_page.navigate_to_assets_for_easterly(screenshots_directory)
-        # print(f"Navigated to assets page for Easterly")
+            # Check that the page does not have any internal server error using consolidated function
+            await validate_admin_no_server_error_async(page)
+            print(f"Page was validated to not have any errors after image upload")
+            await page.screenshot(path=f'{screenshots_directory}15_SUCCESS_new_asset_created_and_stored_on_S3_bucket.png')
 
-        await assets_page.select_newly_uploaded_asset_for_deletion(screenshots_directory)
-        print(f"Selected newly uploaded image asset for deletion")
-        await assets_page.click_delete_button_and_confirm(screenshots_directory)
-        print(f"Clicked delete and confirm image asset deletion")
+            # Navigate to assets page using URL
+            stg_easterly_assets_link_url = "https://stgfinalyticsdata.com/admin/app/asset/?company__id__exact=18619&cu_id=vys"
+            await page.goto(stg_easterly_assets_link_url)
+            print(f"Navigated to stg_easterly_assets_link_url " + stg_easterly_assets_link_url)
 
-        await assets_page.validate_image_deletion_success(page, screenshots_directory)
-        print("Verified successful image deletion")
+            # Delete the newly uploaded image for clean-up
+            await assets_page.select_newly_uploaded_asset_for_deletion(screenshots_directory)
+            print(f"Selected newly uploaded image asset for deletion")
+            await assets_page.click_delete_button_and_confirm(screenshots_directory)
+            print(f"Clicked delete and confirm image asset deletion")
 
-        # Check that the page does not have any internal server error or any error message after image deletion
-        await validate_no_server_error(page, screenshots_directory)
-        print(f"Page was validated to not have any errors after image deletion")
-        await page.screenshot(path=f'{screenshots_directory}26_after_validated_no_error.png')
+            await assets_page.validate_image_deletion_success(page, screenshots_directory)
+            print("Verified successful image deletion")
+
+            # Check that the page does not have any internal server error using consolidated function
+            await validate_admin_no_server_error_async(page)
+            print(f"Page was validated to not have any errors after image deletion")
+            await page.screenshot(path=f'{screenshots_directory}26_after_validated_no_error.png')
+        
+        finally:
+            await context.close()
+            await browser.close()
