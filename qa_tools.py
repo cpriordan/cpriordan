@@ -14,6 +14,10 @@ load_dotenv()
 
 # Global timeout configuration
 DEFAULT_TIMEOUT = int(os.getenv('DEFAULT_TIMEOUT', 10000))
+DEFAULT_WAIT_TYPE = os.getenv('DEFAULT_WAIT_TYPE', 'networkidle')
+
+# Standard CloudFront URLs for Finalytics staging
+DEFAULT_CLOUDFRONT_URLS = ("//d1v4vw9mwf7wyh.cloudfront.net", "https://d1v4vw9mwf7wyh.cloudfront.net")
 
 def clear_screenshots_directory(directory):
     """Clear screenshots directory, removing all files and recreating it."""
@@ -577,6 +581,298 @@ async def wait_for_js_and_element_async(page, hero_heading_selector, timeout=Non
         print(f"Element '{hero_heading_selector}' is now visible.")
     except AsyncTimeoutError as e:
         pytest.fail(f"Timeout waiting for element '{hero_heading_selector}' to become visible: {e}")
+
+
+async def process_page_data_async(page, data_item, screenshots_directory, screenshot_counter, screenshots=True,
+                                 validate_finalytics=False, client="", cloudfront_urls=None, username=None, password=None):
+    """
+    Process a single data item (URL string, int for sleep, or dict with expectations).
+    Returns updated screenshot counter.
+    """
+    if isinstance(data_item, int):
+        # Integer means sleep for that many seconds
+        print(f"Sleeping for {data_item} seconds...")
+        await asyncio.sleep(data_item)
+        return screenshot_counter
+    
+    elif isinstance(data_item, str):
+        # Simple URL navigation
+        current_url = page.url if hasattr(page, 'url') else "unknown"
+        print(f"Navigating from {current_url} to: {data_item}")
+        await page.goto(data_item)
+        print(f"Navigation completed, current URL: {page.url}")
+        
+        # Handle login if credentials provided
+        if username and password:
+            print(f"Checking for login redirect...")
+            await login_if_redirected(page, username, password)
+            print(f"After login check, current URL: {page.url}")
+            
+        await page.wait_for_load_state(DEFAULT_WAIT_TYPE)
+        
+        # Check for cookie modals on every page load
+        await dismiss_cookie_modal(page)
+        
+        if screenshots:
+            screenshot_counter += 1
+            await page.screenshot(path=f'{screenshots_directory}{screenshot_counter}_navigation_screenshot.png')
+            print(f"Screenshot saved: {screenshot_counter}_navigation_screenshot.png")
+        return screenshot_counter
+    
+    elif isinstance(data_item, dict):
+        # Dict with URL and expectations
+        url = data_item['url']
+        expected = data_item.get('expected', {})
+        wait_type = data_item.get('wait_type') or expected.get('wait_type', DEFAULT_WAIT_TYPE)
+        
+        print(f"Navigating to: {url}")
+        await page.goto(url)
+        # Handle login if credentials provided
+        if username and password:
+            await login_if_redirected(page, username, password)
+        
+        # Handle different wait types
+        if wait_type == 'element':
+            # Find the appropriate selector based on what elements are expected
+            element_selector = None
+            for key in expected.keys():
+                if key.endswith('__selector'):
+                    element_selector = expected[key]
+                    break
+            if not element_selector:
+                element_selector = '.c-hero'  # fallback
+            await wait_for_js_and_element_async(page, element_selector)
+        elif wait_type == 'sleep':
+            sleep_time = data_item.get('sleep', 5)  # Default 5 seconds if not specified
+            print(f"Sleeping for {sleep_time} seconds...")
+            await asyncio.sleep(sleep_time)
+        elif wait_type in ['load', 'networkidle']:
+            await page.wait_for_load_state(wait_type)
+        else:
+            await page.wait_for_load_state(DEFAULT_WAIT_TYPE)
+        
+        # Check expectations if provided
+        for key, expected_value in expected.items():
+            # Skip non-element keys
+            if key in ['wait_type', 'screenshot']:
+                continue
+                
+            # Determine element type and selector
+            if '__selector' in key:
+                element_type = key.split('__selector')[0]
+                selector = expected_value
+                # Find the corresponding expected value
+                expected_content = expected.get(element_type)
+                if expected_content is None:
+                    continue  # No expected content for this selector
+            else:
+                # Assume key is the element type and value is expected content
+                element_type = key
+                expected_content = expected_value
+                # Look for a corresponding selector, or use default
+                selector_key = f"{element_type}__selector"
+                selector = expected.get(selector_key, f'{element_type}:first-of-type')
+            
+            # Skip if we don't have expected content to validate
+            if expected_content is None:
+                continue
+                
+            print(f"Checking {element_type} element...")
+            
+            try:
+                await page.locator(selector).wait_for(state='visible', timeout=5000)
+                actual_content = await page.locator(selector).inner_text()
+                print(f"---> {element_type.upper()} content is *** {actual_content} ***")
+                
+                # Support for multiple acceptable values
+                if isinstance(expected_content, list):
+                    assert any(exp == actual_content for exp in expected_content), (
+                        f"{element_type.upper()} has content '{actual_content}' but expected one of {expected_content}"
+                    )
+                else:
+                    assert expected_content == actual_content, (
+                        f"{element_type.upper()} has content '{actual_content}' but expected content was '{expected_content}'"
+                    )
+            except Exception as e:
+                print(f"Error getting {element_type} content with selector '{selector}': {e}")
+                # Try alternative selectors based on element type
+                alt_selectors = []
+                if element_type == 'h1':
+                    alt_selectors = ['h1', '.hero h1', '.c-hero h1', '.col-12 h1', 'h1:first-of-type']
+                elif element_type == 'h2':
+                    alt_selectors = ['h2', '.hero h2', '.c-hero h2', 'h2:first-of-type']
+                elif element_type == 'p':
+                    alt_selectors = ['p', '.hero p', '.c-hero p', 'p:first-of-type']
+                else:
+                    alt_selectors = [element_type, f'.hero {element_type}', f'.c-hero {element_type}', f'{element_type}:first-of-type']
+                
+                for alt_selector in alt_selectors:
+                    try:
+                        await page.locator(alt_selector).wait_for(state='visible', timeout=3000)
+                        actual_content = await page.locator(alt_selector).inner_text()
+                        print(f"---> {element_type.upper()} content (using {alt_selector}) is *** {actual_content} ***")
+                        
+                        # Support for multiple acceptable values in fallback too
+                        if isinstance(expected_content, list):
+                            assert any(exp == actual_content for exp in expected_content), (
+                                f"{element_type.upper()} has content '{actual_content}' but expected one of {expected_content}"
+                            )
+                        else:
+                            assert expected_content == actual_content, (
+                                f"{element_type.upper()} has content '{actual_content}' but expected content was '{expected_content}'"
+                            )
+                        break
+                    except Exception:
+                        continue
+                else:
+                    raise Exception(f"Could not find {element_type.upper()} element with any selector on {url}")
+        
+        # Validate Finalytics tags if requested for this specific page
+        if validate_finalytics and cloudfront_urls and data_item.get('validate_finalytics', False):
+            html_content = await page.content()
+            common_tags = get_common_finalytics_tags()
+            required_tags = [
+                common_tags['css_tag'],
+                common_tags['js_tag'], 
+                common_tags['function_js_tag'],
+                common_tags['settings_div_js_tag']
+            ]
+            validate_finalytics_tags(html_content, cloudfront_urls, required_tags, client)
+            print(f"Finalytics tags validated successfully for {client}")
+        
+        # Take screenshot based on global setting or per-item setting
+        should_screenshot = screenshots or data_item.get('screenshot', False)
+        if should_screenshot:
+            screenshot_counter += 1
+            await page.screenshot(path=f'{screenshots_directory}{screenshot_counter}_expectation_screenshot.png')
+        return screenshot_counter
+    
+    else:
+        raise ValueError(f"Invalid data item type: {type(data_item)}. Expected str, int (for sleep), or dict.")
+
+
+
+async def dismiss_cookie_modal(page):
+    """
+    Attempt to dismiss cookie consent modals by looking for Accept/Close buttons only.
+    """
+    try:
+        # Only look for buttons that clearly dismiss/accept cookies, not open settings
+        dismiss_selectors = [
+            '[aria-label="dismiss cookie message"]',  # MissionFed specific
+            '#onetrust-close-btn-container button',
+            '#onetrust-close-btn-container',
+            '#onetrust-accept-btn-handler',
+            'button#onetrust-accept-btn-handler',
+            '.onetrust-close-btn-handler',
+            'a.cc-btn.cc-dismiss:has-text("Close")',  # MissionFed specific
+            '.cc-dismiss',  # Generic cookie consent close
+            'button:has-text("Accept All")',
+            'button:has-text("Accept")',
+            'button:has-text("Allow All")',
+            'button:has-text("Allow")', 
+            'button:has-text("Close")',
+            'button:has-text("Got it")',
+            'button:has-text("I Understand")',
+            '.cookie-consent button:has-text("Accept")',
+            '.cookie-banner button:has-text("Accept")'
+        ]
+        
+        for selector in dismiss_selectors:
+            try:
+                element = page.locator(selector).first
+                if await element.is_visible(timeout=1000):
+                    print(f"Found cookie dismiss button: {selector}")
+                    await element.click()
+                    print("Cookie consent dismissed")
+                    await page.wait_for_timeout(500)  # Brief wait
+                    return True
+            except:
+                continue
+                
+        print("No cookie dismiss modal found")
+        return False
+    except Exception as e:
+        print(f"Error dismissing cookie modal: {e}")
+        return False
+
+async def login_if_redirected(page, username, password, timeout=30000):
+    """
+    Handle login if redirected to a login page.
+    """
+    try:
+        # Check if we're on a login page by looking for common login form elements
+        login_form = await page.locator('form').first.is_visible() if await page.locator('form').count() > 0 else False
+        username_field = await page.locator('input[type="text"], input[type="email"], input[name*="user"], input[name*="login"]').first.is_visible() if await page.locator('input[type="text"], input[type="email"], input[name*="user"], input[name*="login"]').count() > 0 else False
+        password_field = await page.locator('input[type="password"]').first.is_visible() if await page.locator('input[type="password"]').count() > 0 else False
+        
+        if login_form and username_field and password_field:
+            print(f"Login form detected, attempting to login with username: {username}")
+            
+            # Fill username
+            await page.locator('input[type="text"], input[type="email"], input[name*="user"], input[name*="login"]').first.fill(username)
+            # Fill password  
+            await page.locator('input[type="password"]').first.fill(password)
+            
+            # Submit form
+            submit_button = page.locator('input[type="submit"], button[type="submit"], button:has-text("Login"), button:has-text("Sign in")')
+            if await submit_button.count() > 0:
+                await submit_button.first.click()
+                await page.wait_for_load_state('networkidle', timeout=timeout)
+                print("Login successful")
+                # After login, try to dismiss any cookie modal
+                await dismiss_cookie_modal(page)
+            else:
+                print("No submit button found")
+        else:
+            print("No login form detected, proceeding without login")
+            # Check for cookie modal even without login
+            await dismiss_cookie_modal(page)
+            
+    except Exception as e:
+        print(f"Login attempt failed: {e}")
+
+
+async def process_test_data_async(page, data, screenshots_directory, screenshots=True, 
+                                 validate_js=False, validate_finalytics=False, client="", 
+                                 error_tracker=None, cloudfront_urls=None, username=None, password=None):
+    """
+    Process a list of test data items (URLs, sleep integers, and dicts with expectations).
+    
+    Data items can be:
+        - str: URL to navigate to
+        - int: Number of seconds to sleep
+        - dict: URL with expectations and validation options
+    
+    Args:
+        screenshots: If True, take screenshots of all pages. If False, only take 
+                    screenshots of dict items that have 'screenshot': True
+        validate_js: If True, enable JavaScript error detection
+        validate_finalytics: If True, validate Finalytics tags on pages
+        client: Client name for error reporting
+        error_tracker: List to track JS errors
+        cloudfront_urls: Tuple of CloudFront URLs for Finalytics validation
+    """
+    screenshot_counter = 0
+    
+    # Set up JS error detection if requested
+    if validate_js and error_tracker is not None:
+        specific_js_files = get_common_js_files()
+        await detect_js_errors_from_specific_files_async(
+            client, page, specific_js_files, error_tracker, screenshots_directory
+        )
+    
+    for data_item in data:
+        screenshot_counter = await process_page_data_async(
+            page, data_item, screenshots_directory, screenshot_counter, screenshots,
+            validate_finalytics, client, cloudfront_urls, username, password
+        )
+    
+    # Check for JS errors at the end
+    if validate_js and error_tracker and error_tracker:
+        pytest.fail(f"Detected JavaScript errors: {error_tracker}")
+    
+    return screenshot_counter
 
 
 def validate_finalytics_tags(page_content, cloudfront_urls, required_tags, client=""):
