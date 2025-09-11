@@ -139,13 +139,40 @@ def check_link_on_page(page, link_text, link_href=None):
     return link.count() > 0
 
 
+import threading
+_otp_lock = threading.Lock()
+_last_otp_code = None
+_last_otp_timestamp = 0
+
 def generate_otp_code(totp_instance):
-    """Generate OTP code with timing validation."""
-    remaining_time = totp_instance.interval - (int(time.time()) % totp_instance.interval)
-    if remaining_time < 5:
-        # Short pause so the token rolls over
-        time.sleep(remaining_time + 1)
-    return totp_instance.now()
+    """Generate OTP code with reuse prevention across concurrent tests."""
+    global _last_otp_code, _last_otp_timestamp
+    
+    with _otp_lock:
+        current_time = int(time.time())
+        remaining_time = totp_instance.interval - (current_time % totp_instance.interval)
+        current_otp = totp_instance.now()
+        
+        # If this OTP was recently generated, wait for the next window
+        if current_otp == _last_otp_code and (current_time - _last_otp_timestamp) < 35:
+            print(f"OTP {current_otp} was recently used. Waiting for next window...")
+            time.sleep(remaining_time + 1)
+            current_otp = totp_instance.now()
+            remaining_time = totp_instance.interval - (int(time.time()) % totp_instance.interval)
+        
+        # Also wait if we're very close to expiration (less than 3 seconds)
+        elif remaining_time < 3:
+            print(f"OTP expires in {remaining_time}s. Waiting for next window...")
+            time.sleep(remaining_time + 1)
+            current_otp = totp_instance.now()
+            remaining_time = totp_instance.interval - (int(time.time()) % totp_instance.interval)
+        
+        # Store this OTP info to prevent reuse
+        _last_otp_code = current_otp
+        _last_otp_timestamp = current_time
+        
+        print(f"Generated OTP code: {current_otp} (expires in ~{remaining_time}s)")
+        return current_otp
 
 
 def setup_environment_variables(user_key, pw_key, otp_key):
@@ -266,15 +293,51 @@ class AdminLoginPage:
             return self._enter_2fa_code_async(totp_instance)
         else:
             otp_input = self.page.locator('#id_token-otp_token')
-            self.page.wait_for_selector('#id_token-otp_token', timeout=60000)
-            self.page.wait_for_timeout(300)
-            otp_input.wait_for(state="visible", timeout=30000)
+            print("Waiting for 2FA input field to appear...")
+            self.page.wait_for_selector('#id_token-otp_token', timeout=30000)
+            otp_input.wait_for(state="visible", timeout=10000)
             
+            # Generate OTP immediately once field is ready
             otp_code = generate_otp_code(totp_instance)
             otp_input.fill(otp_code)
-            self.page.wait_for_timeout(300)
+            self.page.wait_for_timeout(500)  # Brief pause to ensure input is registered
             print(f"OTP code {otp_code} entered.")
             return otp_code
+
+    def complete_2fa_login(self, test_env):
+        """Complete the 2FA login process and wait for redirect to admin page."""
+        if self.is_async:
+            return self._complete_2fa_login_async(test_env)
+        else:
+            # Click the final login button
+            self.page.get_by_role("button", name="Login").click()
+            print("Final login button clicked after 2FA.")
+            
+            # Wait for redirect to admin page
+            try:
+                self.page.wait_for_url(f'https://{test_env}finalyticsdata.com/admin/', timeout=30000)
+                print(f"Successfully redirected to admin page: {self.page.url}")
+            except Exception as e:
+                print(f"Warning: Expected redirect to admin page failed: {e}")
+                print(f"Current URL: {self.page.url}")
+                # Additional wait in case redirect is slow
+                self.page.wait_for_load_state("networkidle", timeout=10000)
+
+    async def _complete_2fa_login_async(self, test_env):
+        """Complete the 2FA login process and wait for redirect to admin page (async)."""
+        # Click the final login button
+        await self.page.get_by_role("button", name="Login").click()
+        print("Final login button clicked after 2FA.")
+        
+        # Wait for redirect to admin page
+        try:
+            await self.page.wait_for_url(f'https://{test_env}finalyticsdata.com/admin/', timeout=30000)
+            print(f"Successfully redirected to admin page: {self.page.url}")
+        except Exception as e:
+            print(f"Warning: Expected redirect to admin page failed: {e}")
+            print(f"Current URL: {self.page.url}")
+            # Additional wait in case redirect is slow
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
 
     async def _enter_2fa_code_async(self, totp_instance):
         otp_input = self.page.locator('#id_token-otp_token')
@@ -282,11 +345,8 @@ class AdminLoginPage:
         await self.page.wait_for_timeout(300)
         await otp_input.wait_for(state="visible", timeout=30000)
         
-        # Generate OTP with timing validation
-        remaining_time = totp_instance.interval - (int(time.time()) % totp_instance.interval)
-        if remaining_time < 5:
-            await asyncio.sleep(remaining_time + 1)
-        otp_code = totp_instance.now()
+        # Use the consolidated generate_otp_code function for consistency
+        otp_code = generate_otp_code(totp_instance)
         
         await otp_input.fill(otp_code)
         await self.page.wait_for_timeout(300)

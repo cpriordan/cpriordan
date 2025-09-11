@@ -181,7 +181,7 @@ def test_content_preview_segment(admin_browser_context_sync):
     login_page.navigate(test_env)
     login_page.login(findata_user, findata_pw)
     otp_code = login_page.enter_2fa_code(totp)
-    page.get_by_role("button", name="Login").click()
+    login_page.complete_2fa_login(test_env)
     
     # Validate login success
     login_page.take_screenshot(f'{screenshots_directory}1_successful_login_using_2fa.png')

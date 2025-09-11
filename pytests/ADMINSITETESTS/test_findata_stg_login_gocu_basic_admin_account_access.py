@@ -34,8 +34,8 @@ def test_check_basic_admin_account_access(admin_browser_context_sync):
     print("Waiting for 2FA input field...")
     otp_code = login_page.enter_2fa_code(totp)
     
-    # Complete login
-    page.get_by_role("button", name="Login").click()
+    # Complete login with proper navigation handling
+    login_page.complete_2fa_login(test_env)
     
     # Take screenshot after successful login
     login_page.take_screenshot(f'{screenshots_directory}1_successful_login_using_2fa.png')
