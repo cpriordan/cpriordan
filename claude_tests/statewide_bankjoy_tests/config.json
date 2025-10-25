@@ -1,0 +1,62 @@
+{
+  "base_url": "https://statewide.stage.bankjoy.com/?cb=1&session_init=1&debug_all=1",
+  "signin_url": "https://statewide.stage.bankjoy.com/?cb=1&session_init=1",
+  "dashboard_url": "https://statewide.stage.bankjoy.com/consumer/main/dashboard",
+  "credentials": {
+    "username": "cbracey25",
+    "password": "SwFCU2025$$$"
+  },
+  "core_products": [
+    "checking account",
+    "cd",
+    "equipment loan",
+    "personal loan",
+    "rv loan",
+    "ira",
+    "credit card",
+    "boat loan",
+    "car loan",
+    "savings account"
+  ],
+  "selectors": {
+    "login": {
+      "username": "#username",
+      "password": "#password",
+      "continue_button": "button:has-text('Continue')",
+      "tile_ad_wrapper": "#finalytics-information-wrapper-ad",
+      "tile_ad_cta": "#finalytics-information-wrapper-ad > div > div:nth-child(3) > div > a"
+    },
+    "overlay": {
+      "broadcast_ad": "#finalytics-broadcast-ad",
+      "broadcast_ad_cta": "#finalytics-broadcast-ad > div:nth-child(3) > div > a",
+      "close_button": "#mat-mdc-dialog-0 > div > div > app-broadcast-ad-dialog > button > span > span > svg"
+    },
+    "card": {
+      "tile_ad_image": "#finalytics-tile-ad > div > img",
+      "tile_ad_cta": "#finalytics-tile-ad > div > div > div > a"
+    }
+  },
+  "timeouts": {
+    "element_wait": 10000,
+    "page_load": 30000,
+    "scroll_delay": 500,
+    "max_scrolls": 10
+  },
+  "browser": {
+    "headless": false,
+    "viewport": {
+      "width": 1920,
+      "height": 1080
+    },
+    "card_ad_zoom": 0.8
+  },
+  "screenshots": {
+    "base_directory": "statewide",
+    "full_page": true,
+    "subdirectories": {
+      "login": "olb/login/core_products",
+      "overlay": "olb/overlay/core_products",
+      "card": "olb/card/core_products"
+    }
+  }
+}
