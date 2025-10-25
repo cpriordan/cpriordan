@@ -1,0 +1,76 @@
+# Code Style and Conventions
+
+## Naming Conventions
+- **Functions/Methods**: `snake_case`
+- **Classes**: `PascalCase`
+- **Variables**: `snake_case`
+- **Constants**: `UPPER_SNAKE_CASE`
+- **Private functions**: Prefix with `_` (e.g., `_normalize_url`)
+- **Fixtures**: Descriptive names like `browser_context`, `env_config`
+
+## Type Hints
+- Modern Python type hints are used extensively
+- Import from `typing` module: `Optional`, `List`, `Dict`, `Any`
+- Function signatures include return types
+- Example: `def screenshots_dir(self, client: str, env_sub: Optional[str] = None) -> Path:`
+
+## Dataclasses
+- Used for configuration objects (e.g., `ScenarioConfig`)
+- Decorated with `@dataclass`
+- Include type annotations for all fields
+- Use `field()` for complex defaults
+
+## Docstrings
+- Triple-quoted strings for docstrings
+- Used for classes, functions, and complex logic
+- Generally simple and concise
+- Example:
+  ```python
+  def clear_screenshots_directory(directory):
+      """Fixture to set up and tear down the Playwright browser context."""
+  ```
+
+## Comments
+- Inline comments use `#` for explanations
+- Used to explain non-obvious logic
+- Change logs sometimes included at top of files with date stamps
+- Examples:
+  ```python
+  # Add delay to mimic user interaction
+  time.sleep(1)
+  
+  # Generate a fresh TOTP if less than 5 seconds remain
+  if remaining_time < 5:
+      time.sleep(remaining_time + 1)
+  ```
+
+## Code Organization
+- Imports at the top, grouped by: standard library, third-party, local
+- Environment variable loading near top with validation
+- Utility functions before test functions
+- Fixtures defined with `@pytest.fixture` decorator
+- Test functions start with `test_`
+
+## Async Patterns
+- Use `async/await` for Playwright async API
+- Fixtures with `@pytest_asyncio.fixture`
+- Test functions: `async def test_name(...)`
+- Properly await all async operations
+
+## Error Handling
+- Validate environment variables at module load
+- Raise `ValueError` for missing required env vars
+- Try/except for file operations with informative error messages
+- Timeout parameters on wait operations
+
+## Pytest Conventions
+- Fixtures with appropriate scope (`function`, `session`)
+- Parametrized tests using `@pytest.mark.parametrize`
+- Custom pytest options via `pytest_addoption`
+- Test IDs for readability
+
+## Environment Variables
+- Loaded via `python-dotenv` with `load_dotenv()`
+- Accessed via `os.environ.get()`
+- Validated early with clear error messages
+- Examples: `FINDATA_GOCU_USER`, `FINDATA_GOCU_PW`, `FINDATA_GOCU_OTP`
