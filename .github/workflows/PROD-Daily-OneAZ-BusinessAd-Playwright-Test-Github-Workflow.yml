@@ -1,8 +1,8 @@
 name: PROD Daily OneAZ Business Ad Playwright Test
 
 on:
-  schedule:
-    - cron: '0 14 * * *'  # Runs daily at 6:00 AM PST (14:00 UTC)
+  # schedule:
+  #   - cron: '0 14 * * *'  # Runs daily at 6:00 AM PST (14:00 UTC)
   workflow_dispatch:    # Allows manual triggering
 
 jobs:
