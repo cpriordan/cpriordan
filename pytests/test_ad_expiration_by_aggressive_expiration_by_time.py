@@ -17,6 +17,7 @@ from playwright.async_api import async_playwright
 
 # Test data configuration
 data = [
+    "https://www.stgfinalyticsdemo.com/?debug_all=1",  # Visit homepage with debug_all=1 first to establish debug session
     "https://www.stgfinalyticsdemo.com/personal/borrow/auto-and-recreational-loans/auto-loans",
     5,  # Sleep for 5 seconds to allow page to fully load
     {

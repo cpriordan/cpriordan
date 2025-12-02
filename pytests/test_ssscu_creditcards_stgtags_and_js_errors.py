@@ -19,8 +19,19 @@ client = "ssscu"
 
 # Test data configuration
 data = [
-    "https://sscustage.wpenginepowered.com/?api=stg",
-    "https://sscustage.wpenginepowered.com/loans-and-credit-cards/credit-cards",
+    # Use 'load' wait type to avoid networkidle timeout, add debug_all=1&session_init=1 for personalization
+    {
+        'url': "https://sscustage.wpenginepowered.com/?api=stg&debug_all=1&session_init=1",
+        'expected': {
+            'wait_type': 'load'
+        }
+    },
+    {
+        'url': "https://sscustage.wpenginepowered.com/loans-and-credit-cards/credit-cards",
+        'expected': {
+            'wait_type': 'load'
+        }
+    },
     {
         'url': "https://sscustage.wpenginepowered.com/?api=stg",
         'expected': {

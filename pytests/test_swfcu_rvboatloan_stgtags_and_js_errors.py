@@ -1,3 +1,16 @@
+"""
+Test SWFCU RV/Boat Loan Personalization with STG Tags and JS Error Validation
+
+Version History:
+- 2025-11-23: Fixed test failures
+    - Changed first URL to use 'load' wait type to avoid networkidle timeout
+    - Added debug_all=1&session_init=1 to enable personalization
+    - Fixed domain mismatch issue: Changed all URLs from statewidefcu.pixelspoke-staging.com
+      to statewidefcu24.pixelspoke-staging.com (with "24") as the latter has the correct
+      Finalytics cloudfront scripts configured. Without proper cloudfront URLs, personalization
+      cannot work.
+"""
+
 import pytest
 import pytest_asyncio
 import sys
@@ -18,10 +31,24 @@ from playwright.async_api import async_playwright
 client = "swfcu"
 
 # Test data configuration
+# NOTE: Using statewidefcu24.pixelspoke-staging.com (with "24") for all URLs
+# as this is the domain with proper Finalytics cloudfront scripts configured
 data = [
-    "https://statewidefcu24.pixelspoke-staging.com/rv-boat-and-motorcycle-loans/",
+    # Use 'load' wait type to avoid networkidle timeout
     {
-        'url': "https://statewidefcu.pixelspoke-staging.com/?api=stg",
+        'url': "https://statewidefcu24.pixelspoke-staging.com/?api=stg&debug_all=1&session_init=1",
+        'expected': {
+            'wait_type': 'load'
+        }
+    },
+    {
+        'url': "https://statewidefcu24.pixelspoke-staging.com/rv-boat-and-motorcycle-loans/",
+        'expected': {
+            'wait_type': 'load'
+        }
+    },
+    {
+        'url': "https://statewidefcu24.pixelspoke-staging.com/?api=stg&debug_all=1",
         'expected': {
             'h1': "Sail to low Rates",
             'h1__selector': "h1",

@@ -1,3 +1,24 @@
+"""
+Test TRU Multiproduct - Checking Hero with Card Ads
+
+Version History:
+- 2025-11-25: Fixed strict mode violation and selector issues
+    - Problem: Generic selector 'div.eyebrow' matched 8 elements across the page:
+      1. CHECKING ACCOUNTS (target element)
+      2. VISA CREDIT CARDS
+      3. MORTGAGE
+      4. THIS JUST IN
+      5. YOUR NEIGHBORHOOD CREDIT UNION
+      6. Budgeting
+      7. Buying a House
+      8. Fraud
+    - Solution: Found working selector pattern from test_tru_rates_page_js_errors.py
+    - Changed selector from 'div.eyebrow' to '#primary > section:nth-child(1) > div > div > div.container > div > div > div > div > div.eyebrow'
+    - This specific selector uniquely targets the eyebrow div within the hero section only
+    - Also changed expected key from 'div' to 'h1' to match qa_tools conventions
+    - Changed 'div__selector' to 'h1__selector' for consistency
+"""
+
 import pytest
 import pytest_asyncio
 import sys
@@ -26,8 +47,8 @@ data = [
     {
         'url': "https://trustonestage.wpenginepowered.com/?api=stg&session_init=1",
         'expected': {
-            'div': "CHECKING ACCOUNTS",
-            'div__selector': "div.eyebrow",
+            'h1': "CHECKING ACCOUNTS",
+            'h1__selector': "#primary > section:nth-child(1) > div > div > div.container > div > div > div > div > div.eyebrow",
             'wait_type': 'element'
         },
         'validate_finalytics': True

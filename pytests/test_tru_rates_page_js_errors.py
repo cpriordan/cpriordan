@@ -1,3 +1,18 @@
+"""
+Test TRU Rates Page with JS Error Validation
+
+Version History:
+- 2025-11-25: Fixed networkidle timeout issues
+    - Problem: Simple string URLs were using default 'networkidle' wait type which timed out after 30000ms
+    - Solution: Converted all URLs to dictionary format with explicit 'load' wait type
+    - Added debug_all=1&session_init=1 to first URL for proper personalization
+    - Changes:
+      1. First URL: Added debug_all=1&session_init=1 parameters with 'load' wait type
+      2. Checking accounts URL: Changed from string to dict with 'load' wait type
+      3. Rates homeloans URL: Changed from string to dict with 'load' wait type
+    - This prevents timeout issues on sites with persistent network connections
+"""
+
 import pytest
 import pytest_asyncio
 import sys
@@ -19,9 +34,24 @@ client = "tru"
 
 # Test data configuration
 data = [
-    "https://trustonestage.wpenginepowered.com/?api=stg",
-    "https://trustonestage.wpenginepowered.com/checking-and-savings/checking-accounts/",
-    "https://trustonestage.wpenginepowered.com/rates/rates-homeloans",
+    {
+        'url': "https://trustonestage.wpenginepowered.com/?api=stg&debug_all=1&session_init=1",
+        'expected': {
+            'wait_type': 'load'
+        }
+    },
+    {
+        'url': "https://trustonestage.wpenginepowered.com/checking-and-savings/checking-accounts/",
+        'expected': {
+            'wait_type': 'load'
+        }
+    },
+    {
+        'url': "https://trustonestage.wpenginepowered.com/rates/rates-homeloans",
+        'expected': {
+            'wait_type': 'load'
+        }
+    },
     {
         'url': "https://trustonestage.wpenginepowered.com/?api=stg",
         'expected': {

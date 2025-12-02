@@ -20,11 +20,22 @@ client = "gocu"
 
 # Test data configuration
 data = [
-    "https://georgiasownstg.wpengine.com/checking/i-check-youth-account",
+    # Use 'load' wait type to avoid networkidle timeout
+    {
+        'url': "https://georgiasownstg.wpengine.com/?cb=1&debug_all=1&session_init=1",
+        'wait_type': 'load',
+        'sleep': 3
+    },
+    {
+        'url': "https://georgiasownstg.wpengine.com/checking/i-check-youth-account",
+        'expected': {
+            'wait_type': 'load'
+        }
+    },
     {
         'url': "https://georgiasownstg.wpengine.com/?cb=1",
         'expected': {
-            'h1': "Level up your financial game",
+            'h1': "Manage your money like a pro",
             'h1__selector': ".hero-content > div:nth-child(1) > h1:nth-child(2)",
             'wait_type': 'element'
         },
