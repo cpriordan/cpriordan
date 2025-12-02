@@ -160,8 +160,8 @@ def generate_otp_code(totp_instance):
             current_otp = totp_instance.now()
             remaining_time = totp_instance.interval - (int(time.time()) % totp_instance.interval)
         
-        # Also wait if we're very close to expiration (less than 3 seconds)
-        elif remaining_time < 3:
+        # Also wait if we're very close to expiration (less than 10 seconds)
+        elif remaining_time < 10:
             print(f"OTP expires in {remaining_time}s. Waiting for next window...")
             time.sleep(remaining_time + 1)
             current_otp = totp_instance.now()

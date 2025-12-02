@@ -624,7 +624,7 @@ def test_publish_unpublish_campaign(browser_context):
     print(f"Username {findata_user} and password were filled.")
 
     # Use the login_page method to automatically generate the OTP code and enter it once
-    otp_code = generate_otp_code()
+    otp_code = generate_otp_code(totp)
     login_page.enter_2fa_code(otp_code)
 
     print("2FA token automatically generated and entered and about to click the login button")
