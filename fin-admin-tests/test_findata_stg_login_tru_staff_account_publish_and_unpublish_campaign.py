@@ -10,68 +10,9 @@ from datetime import datetime
 
 # Add parent directory to path to import qa_tools
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from qa_tools import (browser_context, clear_screenshots_directory, 
-                      validate_no_server_error, generate_otp_code, 
+from qa_tools import (browser_context, clear_screenshots_directory,
+                      validate_no_server_error, generate_otp_code,
                       setup_environment_variables, LoginPage)
-
-
-class LoginPage:
-    def __init__(self, page):
-        self.page = page
-
-    def navigate(self):
-        self.page.goto(f'https://{test_env}finalyticsdata.com/account/login/?next=/')
-
-    def login(self, username, password):
-        self.page.get_by_label("Username:").click()
-        self.page.get_by_label("Username:").fill(username)
-        # Instead of time.sleep(1), do a short wait_for_timeout if needed
-        self.page.wait_for_timeout(300)  # a brief pause to mimic user pause
-        self.page.get_by_label("Password").fill(password)
-        self.page.wait_for_timeout(300)
-        self.page.get_by_role("button", name="Login").click()
-        self.page.wait_for_load_state("networkidle")
-
-    def enter_2fa_code(self, otp_code):
-        otp_input = self.page.locator('#id_token-otp_token')
-        self.page.wait_for_selector('#id_token-otp_token', timeout=60000)  # Wait up to 60 seconds
-        self.page.wait_for_timeout(300)
-        otp_input.wait_for(state="visible", timeout=30000) # Ensure the token input field is visible
-        # Before filling out the TOTP code, check the remaining time and generate a fresh one if needed
-        remaining_time = totp.interval - (int(time.time()) % totp.interval)
-        if remaining_time < 5:  # Generate a fresh TOTP if less than 5 seconds remain
-            time.sleep(remaining_time + 1)
-        otp_code = totp.now()
-        otp_input.fill(otp_code)
-        self.page.wait_for_timeout(300)
-        print(f"OTP code {otp_code} entered.")
-
-    def retry_login_with_new_token(self):
-        for attempt in range(2):  # Attempt login up to 2 times
-            try:
-                otp_code = generate_otp_code()
-                print(f"Attempt {attempt + 1}: Entering OTP code {otp_code}.")
-                self.enter_2fa_code(otp_code)
-                # Check if login was successful by verifying the URL
-                if f'https://{test_env}finalyticsdata.com/admin/' in self.page.url:
-                    print("Login successful.")
-                    return
-            except Exception as e:
-                print(f"Login attempt {attempt + 1} failed: {e}")
-
-        raise Exception("Failed to login after multiple attempts.")
-
-    def manually_enter_2fa_code(self):
-        otp_input = self.page.locator('#id_token-otp_token')
-        self.page.wait_for_selector('#id_token-otp_token', timeout=60000)  # Wait up to 60 seconds
-        self.page.wait_for_timeout(300)
-        otp_input.wait_for(state="visible", timeout=30000)
-        # Instead of automatically filling out the OTP code, manually enter as a temporary workaround and force a 10-second manual wait
-        self.page.wait_for_timeout(10000)
-        print(f"OTP code entered.")
-
-    def take_screenshot(self, path):
-        self.page.screenshot(path=path)
 
 class CreateASingleScenarioPage:
     def __init__(self, page):
@@ -80,11 +21,15 @@ class CreateASingleScenarioPage:
         # self.ai_scenarios_link = page.get_by_text("AI Scenarios")
         self.ai_scenarios_link = page.get_by_text("Scenarios").nth(0)
         self.create_new_scenarios_link = page.get_by_text("Create New Scenario")
-        self.create_a_scenario_link = page.get_by_text("Create a Scenario")
+        # UPDATED from Create a Scenario to Create a Single Scenario
+        self.create_a_scenario_link = page.get_by_text("Create a Single Scenario").nth(0)
         self.target_a_product_link = page.get_by_text("Target a Product").nth(0) # first instance
         self.easterly_company_link = page.locator('a[dd="vys"]').first
         self.continue_button = page.get_by_text("Continue")
-        self.auto_loan_scenario_type_link = page.get_by_text("Auto Loan")
+        # AUTO LOAN IS NOW CAR LOAN SO CHANGE SINCE CAUSING FAILURE
+        self.auto_loan_scenario_type_link = page.get_by_text("Car Loan")
+        # There is NOW an additional flow to select a page before selecting a template
+        self.choose_homepage = page.get_by_text("Home Page")
         self.home_hero_template_link = page.get_by_text("Trustone Financial | home hero")
 
     def navigate_to_input_scenario_content(self):
@@ -100,9 +45,16 @@ class CreateASingleScenarioPage:
         # Click the first "Target a Product" link
         self.target_a_product_link.click()
         self.page.wait_for_load_state("networkidle")
+        # Scroll down to continue button AND CLICK ADDED
+        self.continue_button.click()
         # Click on "Auto Loan" scenario type link
         self.auto_loan_scenario_type_link.click()
         self.page.wait_for_load_state("networkidle")
+
+        # NOTE THAT THERE IS NOW A NEED TO SELECT A PAGE BEFORE SELECTING THE TEMPLATE
+        self.choose_homepage.click()
+        self.page.wait_for_load_state("networkidle")
+
         # Click on the desired template
         self.home_hero_template_link.click()
         self.page.wait_for_load_state("networkidle")
@@ -120,6 +72,8 @@ class CreateASingleScenarioPage:
             dropdown.click()
 
     def click_continue_button(self):
+        # SCROLL DOWN TO CONTINUE BUTTON IF NEEDED
+        self.page.get_by_text("Continue").scroll_into_view_if_needed()
         self.page.wait_for_load_state("networkidle")
         self.continue_button.wait_for(state="visible", timeout=30000)
         self.continue_button.click()
@@ -159,16 +113,49 @@ class InputScenarioContentPage:
 class UploadImage:
     def __init__(self, page):
         self.page = page
-        self.enter_image_url = page.get_by_text("Enter Image URL")
-        self.continue_button = page.get_by_text("Continue").nth(1) #Second instance close to image URL
+        # The Img link text field on the main content form
+        # <input type="text" name="img_link" id="custom_img_link" ...>
+        self.image_url_input = page.locator("#custom_img_link")
 
-    def fill_image_url(self, img_url):
-        self.page.wait_for_selector("#inp_img_url", state="visible", timeout=10000)
-        self.enter_image_url.fill(img_url)
+        # The main form submit button at the bottom of the page:
+        # <button class="btn btn-success btn-round" type="submit">Save and Continue</button>
+        # This is what actually advances the wizard after the image URL is set.
+        self.save_and_continue_button = page.get_by_role("button", name="Save and Continue")
 
-    def click_continue_button(self):
+    def fill_image_url(self, img_url: str) -> None:
+        """Fill the Img link field with the given URL.
+
+        This field is on the main page (not in the modal). The old
+        "Enter Image URL" option is no longer present, so we don't
+        click it or wait for it anymore.
+        """
+        # Make sure the page is settled enough
         self.page.wait_for_load_state("networkidle")
-        self.continue_button.click()
+
+        # Ensure the input is present and visible
+        self.image_url_input.wait_for(state="attached", timeout=15000)
+        self.image_url_input.scroll_into_view_if_needed()
+        self.image_url_input.wait_for(state="visible", timeout=15000)
+
+        # Fill the URL
+        self.image_url_input.fill(img_url)
+
+    def click_continue_button(self) -> None:
+        """Click the Save and Continue button to submit the form.
+
+        The DOM now has a single "Save and Continue" button that submits
+        the whole content form (including Img link). There is no separate
+        "Continue" button tied just to the image URL anymore.
+        """
+        # Wait for page to be mostly idle and for the button to exist
+        self.page.wait_for_load_state("networkidle")
+        self.save_and_continue_button.wait_for(state="attached", timeout=15000)
+        self.save_and_continue_button.scroll_into_view_if_needed()
+        self.save_and_continue_button.wait_for(state="visible", timeout=15000)
+
+        # Click to advance to the next step in the wizard
+        self.save_and_continue_button.click()
+        self.page.wait_for_load_state("networkidle")
 
     def take_screenshot(self, path):
         self.page.screenshot(path=path)
@@ -213,13 +200,15 @@ class ScenarioSetupCompletePage:
         self.scenario_setup_description = page.get_by_text("You successfully setup")
         self.preview_now_staging_button = page.get_by_text("Preview Now (Staging)")
         self.create_another_scenario_button = page.get_by_text("Create Another Scenario")
+        self.continue_button = page.get_by_text("Continue")
         # Link below was removed for ads that do not have a production campaign
         # self.publish_campaign_to_production_button = page.get_by_text("Publish Campaign to Production")
 
     def get_link_of_preview_now_staging_button(self):
         # Retrieve the href attribute
         href = self.page.locator("a.btn:nth-child(2)").get_attribute("href")
-        print(f"Preview now staging link is {href}")
+        corrected_href = href.removesuffix("homepage")
+        print(f"CORRECTED Preview now staging link without EXTRA homepage in URL is {corrected_href}")
         return href
 
     def get_link_of_create_a_scenario_button(self):
@@ -364,6 +353,15 @@ class ScenarioSetupCompletePage:
         print("URL matches the expected pattern.")
         return True
 
+    def scroll_down_advanced_settings_until_continue_button_and_click(self):
+        self.page.get_by_text("Continue").scroll_into_view_if_needed()
+        self.page.wait_for_load_state("networkidle")
+        self.continue_button.wait_for(state="visible", timeout=30000)
+        self.continue_button.click()
+
+    def take_screenshot(self, path):
+        self.page.screenshot(path=path)
+
 class AdsAdminPage:
     def __init__(self, page):
         self.page = page
@@ -427,46 +425,92 @@ class CampaignAdminPage:
 class PublishUnpublishPage:
     def __init__(self, page):
         self.page = page
-        # self.ai_scenarios_link = page.get_by_text("AI Scenarios")
+        # Left nav links
         self.ai_scenarios_left_nav_link = page.get_by_text("Scenarios").nth(0)
-        self.publish_unpublish_scenarios_left_nav_link = page.get_by_text("Publish/Unpublish Scenarios").first
-        self.publish_scenarios_link = page.get_by_role("link", name="Publish Scenarios", exact=True)
-        self.unpublish_scenarios_link = page.get_by_text("Unpublish Scenarios").nth(2) # Select the third instance
-        # IT IS IMPORTANT THAT THE CAMPAIGN NAME EXISTS AND CREATED BY A TEST ADMIN SINCE NO STAFF DOES NOT HAVE PERMISSION TO CREATE IT
-        self.test_scenario_group_to_publish_link = page.get_by_text("Test Core Products Publish and Test | Mode:Test (Published)")
-        # THE CAMPAIGN NAME BELOW CAN CHANGE BASED ON WHETHER IT IS PUBLISHED OR NOT
-        self.test_scenario_group_to_unpublish_link = page.get_by_text("Core Products Publish and Test | Mode:Prod")
-        self.first_checkbox_content_module = page.locator(
-            "//li[contains(., 'Trustone Auto Loan Test Automation  (Published)')]//input[@type='checkbox']"
+        self.publish_unpublish_scenarios_left_nav_link = page.get_by_text(
+            "Publish/Unpublish Scenarios"
         ).first
-        self.content_module_checkbox = page.locator("#option2220")
-        self.choose_existing_production_target_button = page.get_by_text("Choose Existing Production Target")
-        # THE PRODUCTION CAMPAIGN BELOW HAS TO EXIST ON STG IN PRODUCTION MODE AND NEEDS TO BE CREATED BY AN ADMIN
-        # THE CAMPAIGN NAME BELOW CAN CHANGE BASED ON WHETHER IT IS PUBLISHED OR NOT
-        self.existing_production_group_to_publish_link = page.get_by_text("Core Products Publish and Test | Mode:Prod")
+
+        # Scenario group links / buttons
+        self.test_scenario_group_to_publish_link = page.get_by_text(
+            "Test Core Products Publish and Test | Mode:Test (Published)"
+        )
+        self.test_scenario_group_to_unpublish_link = page.get_by_text(
+            "Core Products Publish and Test | Mode:Prod"
+        )
+
+        # Updated: checkbox locator that matches the HTML
+        self.first_checkbox_content_module = page.locator(
+            "//ul[@class='list-group list-group-bordered list']"
+            "//li[contains(@class, 'list-group-item')"
+            "    and contains(normalize-space(.), 'Trustone Auto Loan Test Automation')]"
+            "//input[@type='checkbox' and contains(@class, 'option-checkbox')]"
+        ).first
+
+        # ❌ Old hard-coded id is now stale – remove it to avoid confusion
+        # self.content_module_checkbox = page.locator("#option2220")
+
+        self.choose_existing_production_target_button = page.get_by_text(
+            "Choose Existing Production Target"
+        )
+        self.existing_production_group_to_publish_link = page.get_by_text(
+            "Core Products Publish and Test | Mode:Prod"
+        )
         self.publish_confirmation_button = page.get_by_text("Publish!")
-        self.unpublish_button = page.get_by_text("Unpublish This Campaign")
+        # self.unpublish_button = page.get_by_text("Unpublish This Campaign") UI CHANGED
+        self.unpublish_button = page.get_by_text("Unpublish Selected Scenarios")
+
+    def _wait_for_publish_unpublish_menu(self):
+        """
+        Wait until the Publish/Unpublish Scenarios menu items are present and visible.
+        """
+        self.page.wait_for_selector(
+            "ul.list-group a[href*='/scenarios/campaigns-list']",
+            state="visible",
+            timeout=30000,
+        )
 
 
     def navigate(self, page):
-        # Click the "AI Scenarios" left nav
+        # Click the "Scenarios" left nav
         self.ai_scenarios_left_nav_link.click()
         self.page.wait_for_load_state("networkidle")
-        # Click the "Publish/Unpublish" left nav
+
+        # Click the "Publish/Unpublish Scenarios" left nav
         self.publish_unpublish_scenarios_left_nav_link.click()
         self.page.wait_for_load_state("networkidle")
 
+        # Make sure the Publish/Unpublish list-group is actually rendered
+        self._wait_for_publish_unpublish_menu()
+
     def publish_campaign(self, page, screenshots_directory):
-        # Click the "Publish Scenarios" link
-        self.publish_scenarios_link.click()
+        # Ensure the list-group with our links is visible
+        self._wait_for_publish_unpublish_menu()
+
+        # Find the link by href instead of accessible name text
+        publish_scenarios_link = self.page.locator(
+            "a[href='/scenarios/campaigns-list/publish']"
+        ).first
+        publish_scenarios_link.wait_for(state="visible", timeout=30000)
+        publish_scenarios_link.click()
         self.page.wait_for_load_state("networkidle")
+
         self.take_screenshot(f'{screenshots_directory}11_existing_stg_campaign_to_publish.png')
         # Select the existing stg campaign
         self.test_scenario_group_to_publish_link.click()
         self.page.wait_for_load_state("networkidle")
         self.take_screenshot(f'{screenshots_directory}12_select_content_module_to_publish.png')
+
+        # Ensure the checkbox is present before checking
+        self.page.wait_for_selector(
+            "//ul[@class='list-group list-group-bordered list']"
+            "//li[contains(@class, 'list-group-item')]"
+            "//input[@type='checkbox']",
+            state="visible",
+            timeout=30000
+        )
         # Select the first checkbox if there are multiple instances of the same content module
-        self.first_checkbox_content_module.click()
+        self.first_checkbox_content_module.check()
         self.page.wait_for_load_state("networkidle")
         self.take_screenshot(f'{screenshots_directory}13_content_module_selected_to_publish.png')
         # Click the "Choose Existing Production Target" button to select the prod campaign
@@ -482,8 +526,15 @@ class PublishUnpublishPage:
         self.page.wait_for_load_state("networkidle")
 
     def unpublish_campaign(self, page, screenshots_directory):
-        # Click the "Publish Scenarios" link
-        self.unpublish_scenarios_link.click()
+        # Ensure the list-group with our links is visible
+        self._wait_for_publish_unpublish_menu()
+
+        # Target by href for robustness
+        unpublish_scenarios_link = self.page.locator(
+            "a[href='/scenarios/campaigns-list/unpublish']"
+        ).first
+        unpublish_scenarios_link.wait_for(state="visible", timeout=30000)
+        unpublish_scenarios_link.click()
         self.page.wait_for_load_state("networkidle")
 
         # Select the campaign to unpublish
@@ -491,8 +542,16 @@ class PublishUnpublishPage:
         self.page.wait_for_load_state("networkidle")
         self.take_screenshot(f'{screenshots_directory}18_campaign_to_unpublish.png')
 
+        # Ensure the checkbox is present before checking
+        self.page.wait_for_selector(
+            "//ul[@class='list-group list-group-bordered list']"
+            "//li[contains(@class, 'list-group-item')]"
+            "//input[@type='checkbox']",
+            state="visible",
+            timeout=30000
+        )
         # Select the first checkbox if there are multiple instances of the same content module
-        self.first_checkbox_content_module.click()
+        self.first_checkbox_content_module.check()
         self.page.wait_for_load_state("networkidle")
         print("Selected scenario to unpublished")
         self.take_screenshot(f'{screenshots_directory}21_content_module_selected_to_unpublish.png')
@@ -596,19 +655,22 @@ def test_publish_unpublish_campaign(browser_context):
     # Define the base URL and parameter patterns
     base_url = f'https://{test_env}finalyticsdata.com/scenarios/setup-complete'
     preview_staging_base_url = f'https://trustonestage.wpenginepowered.com/'  # Staging URL is for tru if used a tru account
-    # New param patters
+    # New param patterns
     param_patterns = {
-        "ad_ids": r"\d+",  # Match any digits for ad_ids
-        "asset_id": r"\d+",  # Match any digits for asset_id
-        "adcopy_id": r"\d+",  # Match any digits for adcopy_id
-        "products_recommended": r"auto loan"  # Match the selected product
+        "ad_ids": r"\d+",
+        "asset_id": r"\d+",
+        "adcopy_id": r"\d+",
+        "products_recommended": r"car loan",
+        # NEW PARAM PATTERN
+        "segments": r"None"
     }
     # New preview staging URL pattern
     preview_staging_param_patterns = {
-        "ad_ids": r"\d+",  # Match any digits for ad_ids
+        "ad_ids": r"\d+",
         "api": r"stg",
-        # "products_recommended": urllib.parse.quote("auto loan")  # Encode space as %20
-        "products_recommended": r"auto loan"  # Encode space as %20
+        "products_recommended": r"car loan",
+        # NEW PARAM PATTERN
+        "segments": r"None"
     }
     create_scenario_relative_url = "/scenarios/create-single-scenario"
     publish_campaign_to_production_relative_url = "/scenarios/campaigns-list/publish/"
@@ -618,7 +680,7 @@ def test_publish_unpublish_campaign(browser_context):
     clear_screenshots_directory(screenshots_directory)
 
     # Perform login steps
-    login_page.navigate()
+    login_page.navigate(test_env)
     login_page.login(findata_user, findata_pw)
     # Wait for the 2FA input field to appear and ensure it's visible
     print(f"Username {findata_user} and password were filled.")
@@ -655,11 +717,11 @@ def test_publish_unpublish_campaign(browser_context):
                                                                       "Get a Great Trustone Auto Loan Rate!", "Hurry and get your auto loan before offer ends!", "https://trustonestage.wpenginepowered.com/rates/rates-loans", "https://www.stgfinalyticsdemo.com/static/app/assets/images/sample_hero_small_dark-7b4ffb01.jpg")
     input_scenario_content_page.take_screenshot(f'{screenshots_directory}4_input_scenario_content_page_after_filled_out_required_fields.png')
 
-    # Click Save and Continue after entering the scenario content
-    input_scenario_content_page.click_save_and_continue_button()
-    # input_scenario_content_page.take_screenshot(f'{screenshots_directory}4_upload_image_page_after_save_and_continue.png')
+    # NOTE: Do NOT click Save and Continue here - the image URL field is on the same page
+    # input_scenario_content_page.click_save_and_continue_button()
 
-    # Enter the image URL and continue
+    # Enter the image URL and continue (image field is on same page as scenario content)
+    print(f"About to fill in the image URL")
     enter_image_url_page.fill_image_url(f'https://www.{test_env}finalyticsdemo.com/static/app/assets/images/sample_hero_small_dark-7b4ffb01.jpg')
     enter_image_url_page.take_screenshot(f'{screenshots_directory}5_upload_image_page_with_url.png')
     enter_image_url_page.click_continue_button()
@@ -686,7 +748,12 @@ def test_publish_unpublish_campaign(browser_context):
     page.wait_for_load_state()
     validate_no_server_error(page)
     # Scenario Setup Complete screenshot with buttons to validate
-    scenario_setup_complete_page.take_screenshot(f'{screenshots_directory}8_scenario_setup_complete_page.png')
+    scenario_setup_complete_page.take_screenshot(f'{screenshots_directory}8a_scenario_setup_complete_page_advanced_settings.png')
+
+    # Since UI has changed and advanced settings are added, just scroll down the page and click on "Continue" and take screenshot
+    scenario_setup_complete_page.scroll_down_advanced_settings_until_continue_button_and_click()
+    scenario_setup_complete_page.take_screenshot(
+        f'{screenshots_directory}8b_scenario_setup_complete_page_advanced_settings_continued.png')
 
     # Get the link of preview now staging button instead of clicking since can control and use the tab, assert the URL and open it in a new tab and taken screenshot
     preview_staging_link_url = scenario_setup_complete_page.get_link_of_preview_now_staging_button()
