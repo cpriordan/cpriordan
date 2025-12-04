@@ -71,10 +71,9 @@ def validate_no_server_error(page):
 def check_admin_site_site_administration_page_first_link(page, screenshots_directory):
     print(f'Inside check_admin_site_site_administration_page_first_link function and screenshots directory is {screenshots_directory}')
 
-    # CLICK THE FIRST "ADMIN" link ON TOP OF THE PAGE TO GO TO THE SITE ADMINISTRATION PAGE AS AN ADMIN USER
-    link_label = "Admin"  # Replace with the actual label of the link
-    # INCREASE TIMEOUT
-    page.locator(f"text={link_label}").nth(0).click(timeout=60000)
+    # Navigate directly to the admin page instead of clicking a link
+    # The VYS admin account lands on the home page after login, not the admin page
+    page.goto(f'https://{test_env}finalyticsdata.com/admin/')
 
     # Allow for the page to load completely before checking the links
     page.wait_for_load_state("networkidle", timeout=60000)
@@ -120,7 +119,17 @@ def check_admin_site_site_administration_page_first_link(page, screenshots_direc
                 validate_no_server_error(page)
 
                 # Take a screenshot
-                page.screenshot(path=f"{screenshots_directory}/check_admin_site_administration_page/{screenshot_counter}_screenshot_{link_text}_{first_link_text}.png")
+                # Sanitize filename by replacing invalid Windows characters and truncating long names
+                invalid_chars = [':', '/', '\\', '?', '*', '"', '<', '>', '|']
+                safe_link_text = link_text
+                safe_first_link_text = first_link_text
+                for char in invalid_chars:
+                    safe_link_text = safe_link_text.replace(char, "_")
+                    safe_first_link_text = safe_first_link_text.replace(char, "_")
+                # Truncate to avoid Windows path length limits (max 50 chars each)
+                safe_link_text = safe_link_text[:50]
+                safe_first_link_text = safe_first_link_text[:50]
+                page.screenshot(path=f"{screenshots_directory}{screenshot_counter}_screenshot_{safe_link_text}_{safe_first_link_text}.png")
 
                 # Go back to the second-level page
                 page.go_back()
