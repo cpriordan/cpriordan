@@ -53,11 +53,8 @@ class LoginPage:
 class InstantCopyPage:
     def __init__(self, page):
         self.page = page
-        self.admin_link = page.get_by_text("Admin").nth(0) # Click the first instance
-        self.content_nav_link = page.get_by_text("Content").nth(0) # Click the first instance
         self.easterly_company_link = page.get_by_text("Easterly").nth(0) # Use the first instance
         self.missionfed_company_link = page.get_by_text("Mission Fed").nth(0)  # Use the first instance
-        self.instant_copy_nav_link = page.get_by_text("Instant Copy")
         self.clients_nav_link = page.get_by_text("Clients")
         self.car_insurance_to_preview = page.get_by_text("Car Insurance")
         # Textarea for entering the website domain
@@ -75,39 +72,80 @@ class InstantCopyPage:
         self.mortgage_checkbox = "input[type='checkbox'][name='product_items'][value='mortgage__https://missionfed.com/home-loans/']"
         self.savings_checkbox = "input[type='checkbox'][name='product_items'][value='savings account__https://missionfed.com/savings/']"
 
-    async def navigate_to_instant_copy(self, screenshots_directory):
-        await self.admin_link.click()
-        print("Clicked Admin link...")
-        await self.page.screenshot(path=f'{screenshots_directory}2_after_clicked_admin_top_nav.png')
-        await self.page.wait_for_load_state("networkidle")  # Wait for page to stabilize
+    async def _expand_content_section_if_needed(self, screenshots_directory: str | None = None):
+        """Ensure the left-nav 'Content' accordion is expanded so its children (Instant Copy, etc.) are visible.
 
-        await self.content_nav_link.wait_for(state="visible", timeout=30000)
-        await self.page.screenshot(path=f'{screenshots_directory}3_before_clicked_content_left_nav_link.png')
-        await self.content_nav_link.click()
-        print("Clicked Content left nav link...")
-        await self.page.screenshot(path=f'{screenshots_directory}4_after_clicked_content_left_nav_link.png')
-        await self.page.wait_for_load_state("networkidle")
-        # Click the Instant Copy
-        await self.instant_copy_nav_link.wait_for(state="visible", timeout=30000)
-        await self.page.screenshot(path=f'{screenshots_directory}5_before_click_instant_copy_link.png')
-        await self.instant_copy_nav_link.click()
-        await self.page.wait_for_load_state("networkidle")
-        await self.page.screenshot(path=f'{screenshots_directory}6_after_click_instant_copy_link.png')
-        await self.page.wait_for_load_state("networkidle")
-        # Easterly link gets displayed after clicking the Instant Copy link
+        Uses the structure:
+            <a data-toggle="collapse" href="#sidebarLayouts">...Content...</a>
+            <div class="collapse" id="sidebarLayouts"> ... Instant Copy ... </div>
+        """
+        page = self.page
+
+        content_toggle = page.locator("a[data-toggle='collapse'][href='#sidebarLayouts']").first
+        sidebar_layouts = page.locator("div#sidebarLayouts").first
+
+        # Wait for the toggle to exist
+        await content_toggle.wait_for(state="visible", timeout=15000)
+
+        # Check if sidebarLayouts is already expanded (Bootstrap usually adds 'show' when open)
+        classes = await sidebar_layouts.get_attribute("class") or ""
+        is_expanded = "show" in classes
+
+        if not is_expanded:
+            print("Content section appears collapsed; expanding it to reveal child items (Instant Copy, etc.)...")
+            await content_toggle.click()
+            # Give the collapse animation a moment
+            await page.wait_for_timeout(500)
+            if screenshots_directory:
+                await page.screenshot(
+                    path=f"{screenshots_directory}2_expanded_content_left_nav.png"
+                )
+        else:
+            print("Content section is already expanded.")
+
+    async def navigate_to_instant_copy(self, screenshots_directory: str):
+        page = self.page
+
+        # 1) Try the simple case first: 'Instant Copy' already visible in the left nav
+        instant_copy_link = page.get_by_role("link", name="Instant Copy").first
+        if await instant_copy_link.is_visible():
+            print("'Instant Copy' link is already visible; clicking it directly...")
+            await instant_copy_link.click()
+            await page.wait_for_load_state("networkidle")
+            await page.screenshot(path=f"{screenshots_directory}3_instant_copy_loaded_direct.png")
+            print("Successfully navigated to Instant Copy page (direct).")
+        else:
+            # 2) If not visible, expand the Content section in the left nav
+            print("'Instant Copy' not visible; expanding the 'Content' section in the left nav...")
+            await self._expand_content_section_if_needed(screenshots_directory)
+
+            # 3) Now wait for 'Instant Copy' to be visible under the expanded Content group
+            instant_copy_link = page.get_by_role("link", name="Instant Copy").first
+            print("Waiting for 'Instant Copy' link to become visible after expanding Content...")
+            await instant_copy_link.wait_for(state="visible", timeout=15000)
+            await instant_copy_link.click()
+            await page.wait_for_load_state("networkidle")
+            await page.screenshot(path=f"{screenshots_directory}3_instant_copy_loaded_after_expand.png")
+            print("Successfully navigated to Instant Copy page after expanding Content section.")
+
+        # 4) After clicking Instant Copy, navigate to Easterly company page
+        await page.wait_for_load_state("networkidle")
+
+        # Check if Easterly link is visible on the page
         if await self.easterly_company_link.is_visible():
             print("Clicking Easterly company link...")
-            await self.page.screenshot(path=f'{screenshots_directory}7_before_click_easterly_link.png')
+            await page.screenshot(path=f'{screenshots_directory}4_before_click_easterly_link.png')
             await self.easterly_company_link.wait_for(state="visible", timeout=10000)
             await self.easterly_company_link.click()
-            await self.page.wait_for_load_state("networkidle")
-            await self.page.screenshot(path=f'{screenshots_directory}8_after_click_easterly_link.png')
-            await self.page.wait_for_load_state("networkidle")
+            await page.wait_for_load_state("networkidle")
+            await page.screenshot(path=f'{screenshots_directory}5_after_click_easterly_link.png')
+            print("Successfully clicked Easterly company link.")
         else:
-            print(f"Easterly company link was not found so going to link on https://{test_env}finalyticsdata.com/content/instant-copy?cu_id=68490 instead...")
-            await self.page.goto(f"https://{test_env}finalyticsdata.com/content/instant-copy?cu_id=68490", wait_until="networkidle")
-            await self.page.wait_for_load_state("networkidle")
-            await self.page.screenshot(path=f'{screenshots_directory}7_easterly_url_used_for_instant_copy_next_step_to_input_website_domain.png')
+            print(f"Easterly company link was not found; going directly to URL...")
+            await page.goto(f"https://{test_env}finalyticsdata.com/content/instant-copy?cu_id=68490", wait_until="networkidle")
+            await page.wait_for_load_state("networkidle")
+            await page.screenshot(path=f'{screenshots_directory}5_easterly_url_used_for_instant_copy.png')
+            print("Successfully navigated to Easterly instant copy page via direct URL.")
     async def input_website_domain(self, website_domain, screenshots_directory):
         print(f"About to enter website domain {website_domain} and screenshots directory is {screenshots_directory}")
         await self.page.fill(self.input_website_domain_text_field, website_domain)
@@ -198,7 +236,8 @@ class InstantCopyPage:
 
 
 
-async def clear_screenshots_directory(directory):
+def clear_screenshots_directory(directory):
+    """Clear screenshots directory - synchronous function works in async context."""
     if os.path.exists(directory):
         for filename in os.listdir(directory):
             file_path = os.path.join(directory, filename)
@@ -448,7 +487,7 @@ async def test_instant_copy():
         instant_copy_page = InstantCopyPage(page)
 
         screenshots_directory = 'screenshots_adminsite_using_pytest/instant_copy/'
-        await clear_screenshots_directory(screenshots_directory)
+        clear_screenshots_directory(screenshots_directory)
         print(f"Cleared screenshots directory {screenshots_directory}.")
 
         # Perform login steps
@@ -463,7 +502,7 @@ async def test_instant_copy():
 
         current_url = page.url
         print(f"Current URL after login is {current_url}.")
-        expect(page).to_have_url(f'https://{test_env}finalyticsdata.com/')
+        await expect(page).to_have_url(f'https://{test_env}finalyticsdata.com/')
 
         # Navigate to instant copy after login
         await instant_copy_page.navigate_to_instant_copy(screenshots_directory)
