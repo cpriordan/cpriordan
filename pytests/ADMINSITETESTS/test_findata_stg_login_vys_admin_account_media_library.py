@@ -7,76 +7,108 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 from qa_tools import (
-    AdminLoginPage, 
+    AdminLoginPage,
     setup_admin_test_environment,
-    validate_admin_no_server_error_async
+    validate_admin_no_server_error_async,
+    clear_screenshots_directory
 )
-
-async def clear_screenshots_directory(directory):
-    """Clear screenshots directory for async tests."""
-    import shutil
-    if os.path.exists(directory):
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-            except Exception as e:
-                print(f"Failed to delete {file_path}. Reason: {e}")
-    else:
-        os.makedirs(directory)
 
 class MediaLibraryPage:
     def __init__(self, page):
         self.page = page
-        self.admin_link = page.get_by_text("Admin").nth(0) # Click the first instance
-        self.easterly_company_link = page.get_by_text("Easterly").nth(0) # Use the first instance
+        # Left-nav accordion toggle for the "Content" section
+        self.content_section_toggle = page.locator("a[data-toggle='collapse'][href='#sidebarLayouts']").first
+        # Container that holds the Content sub-items (including Media Library)
+        self.content_section_container = page.locator("#sidebarLayouts")
+        # Links inside Content section
+        self.media_library_nav_link = page.get_by_role("link", name="Media Library")
+        self.easterly_company_link = page.get_by_text("Easterly").nth(0)
         self.drag_and_drop_files_here_button = page.locator('h4.message')
         self.enter_img_url = page.get_by_text("Enter Image URL")
-        self.media_library_nav_link = page.get_by_text("Media Library")
-        self.content_nav_link = page.get_by_text("Content").nth(0) # Use the first instance
         self.add_new_asset_button = page.get_by_text("Add New Asset")
-        self.continue_button = page.locator("button:has-text('Continue')").nth(1)  # Select second button instance for the image upload
+        self.continue_button = page.locator("button:has-text('Continue')").nth(1)
         self.save_asset_button = page.get_by_text("Save Asset")
         self.enter_image_url = page.get_by_text("Enter Image URL")
-        self.save_button = page.get_by_text("Save").nth(1) # Use the second instance since suzy saver segment matched
+        self.save_button = page.get_by_text("Save").nth(1)
 
-    async def navigate_to_media_library(self, screenshots_directory):
-        await self.admin_link.click()
-        print("Clicked Admin link...")
-        await self.page.screenshot(path=f'{screenshots_directory}2_after_clicked_admin_top_nav.png')
-        await self.page.wait_for_load_state("networkidle")  # Wait for page to stabilize
+    async def _ensure_content_section_expanded(self, screenshots_directory: str):
+        """Ensure the left-nav "Content" accordion is expanded so its subitems are visible."""
+        # Wait for toggle to be present
+        await self.content_section_toggle.wait_for(state="attached", timeout=15000)
 
-        await self.content_nav_link.wait_for(state="visible", timeout=30000)
-        await self.page.screenshot(path=f'{screenshots_directory}3_before_clicked_content_left_nav_link.png')
-        await self.content_nav_link.click()
-        print("Clicked Content left nav link...")
-        await self.page.screenshot(path=f'{screenshots_directory}4_after_clicked_content_left_nav_link.png')
-        await self.page.wait_for_load_state("networkidle")
-        # Scroll down to media library link
+        # Check if container already has the "show" class (Bootstrap collapse expanded state)
+        is_expanded = False
+        try:
+            is_expanded = await self.content_section_container.evaluate(
+                "el => el && el.classList.contains('show')"
+            )
+        except Exception:
+            # If evaluation fails (e.g. container not yet attached), treat as not expanded
+            is_expanded = False
+
+        if is_expanded:
+            print("Content section is already expanded in left nav.")
+            return
+
+        print("Content section appears collapsed; expanding it via left-nav toggle...")
+        await self.content_section_toggle.scroll_into_view_if_needed()
+        await self.page.wait_for_timeout(300)
+        await self.content_section_toggle.click()
+        await self.page.wait_for_timeout(800)
+
+        if screenshots_directory:
+            await self.page.screenshot(
+                path=f"{screenshots_directory}3_after_expanding_content_section_left_nav.png"
+            )
+
+    async def navigate_to_media_library(self, screenshots_directory: str):
+        """Open the Media Library via the left nav, using the Content accordion."""
+
+        # First, make sure the Content section is expanded
+        await self._ensure_content_section_expanded(screenshots_directory)
+
+        # The Media Library link might still require scrolling inside the left nav container
         await self.scroll_left_navigation_menu()
         print("Used left nav scrollbar to scroll down and view the Media Library link...")
-        await self.page.screenshot(path=f'{screenshots_directory}5_use_left_nav_scroll_bar_to_view_media_library_link.png')
-        # Click media library link
+        await self.page.screenshot(
+            path=f"{screenshots_directory}4_use_left_nav_scroll_bar_to_view_media_library_link.png"
+        )
+
+        # Click Media Library link from left nav
         await self.media_library_nav_link.wait_for(state="visible", timeout=30000)
-        await self.page.screenshot(path=f'{screenshots_directory}6_before_click_media_library_link.png')
+        await self.page.screenshot(
+            path=f"{screenshots_directory}5_before_click_media_library_link.png"
+        )
         await self.media_library_nav_link.click()
-        await self.page.screenshot(path=f'{screenshots_directory}7_after_click_media_library_link.png')
+        print("Clicked Media Library left nav link...")
+        await self.page.screenshot(
+            path=f"{screenshots_directory}6_after_click_media_library_link.png"
+        )
         await self.page.wait_for_load_state("networkidle")
+
         # Easterly link gets displayed after clicking the Media Library link
         if await self.easterly_company_link.is_visible():
             print("Clicking Easterly company link...")
-            await self.page.screenshot(path=f'{screenshots_directory}8_before_click_easterly_link.png')
+            await self.page.screenshot(
+                path=f"{screenshots_directory}7_before_click_easterly_link.png"
+            )
             await self.easterly_company_link.wait_for(state="visible", timeout=10000)
             await self.easterly_company_link.click()
-            await self.page.screenshot(path=f'{screenshots_directory}8_after_click_easterly_link.png')
+            await self.page.screenshot(
+                path=f"{screenshots_directory}8_after_click_easterly_link.png"
+            )
             await self.page.wait_for_load_state("networkidle")
         else:
-            print("Easterly company link not found so go to link on https://stgfinalyticsdata.com/content/media-library/vys/?cu_id=68490 instead...")
-            await self.page.goto("https://stgfinalyticsdata.com/content/media-library/vys/?cu_id=68490", wait_until="networkidle")
-            await self.page.screenshot(path=f'{screenshots_directory}8_go_to_easterly_url_instead.png')
+            print(
+                "Easterly company link not found so go to direct media library URL instead..."
+            )
+            await self.page.goto(
+                "https://stgfinalyticsdata.com/content/media-library/vys/?cu_id=68490",
+                wait_until="networkidle",
+            )
+            await self.page.screenshot(
+                path=f"{screenshots_directory}8_go_to_easterly_url_instead.png"
+            )
 
     async def click_add_new_asset_button(self, screenshots_directory):
         # await self.page.screenshot(path=f'{screenshots_directory}13_before_add_new_asset_button.png')
@@ -456,21 +488,6 @@ class MediaLibraryPage:
                 print(f"Upload attempt {attempt + 1} failed: {e}")
                 await asyncio.sleep(2)  # Wait before retrying
 
-
-async def clear_screenshots_directory(directory):
-    if os.path.exists(directory):
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-            except Exception as e:
-                print(f"Failed to delete {file_path}. Reason: {e}")
-    else:
-        os.makedirs(directory)
-
 class AssetsPage:
     def __init__(self, page):
         self.page = page
@@ -556,7 +573,7 @@ async def test_media_library_addition_and_deletion_of_images():
             # File path for image upload
             local_image_to_upload = os.path.join(os.environ["USERPROFILE"], "Downloads", "car_image.jpg")
             screenshots_directory = 'screenshots_adminsite_using_pytest/media_library/'
-            await clear_screenshots_directory(screenshots_directory)
+            clear_screenshots_directory(screenshots_directory)
             print(f"Cleared screenshots directory {screenshots_directory}.")
             
             # Initialize consolidated login page and page objects
@@ -576,7 +593,7 @@ async def test_media_library_addition_and_deletion_of_images():
             
             current_url = page.url
             print(f"Current URL after login is {current_url}.")
-            expect(page).to_have_url(f'https://{test_env}finalyticsdata.com/')
+            await expect(page).to_have_url(f'https://{test_env}finalyticsdata.com/')
 
             # Navigate to media library after login
             await media_library_page.navigate_to_media_library(screenshots_directory)
@@ -589,9 +606,9 @@ async def test_media_library_addition_and_deletion_of_images():
             except Exception as e:
                 print(f"Error uploading local image {local_image_to_upload}: {e}")
 
-            # Pause for 10 seconds
+            # Pause for 15 seconds
             print("Pause for a few seconds before clicking continue to allow time for continue button to get activated")
-            await asyncio.sleep(15)
+            time.sleep(15)
 
             # Click Continue
             await media_library_page.click_continue_button(screenshots_directory)
