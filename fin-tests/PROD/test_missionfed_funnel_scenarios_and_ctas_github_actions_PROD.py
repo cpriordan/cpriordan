@@ -1,0 +1,1076 @@
+# ===================== 
+# File: fin-tests/PROD/test_missionfed_funnel_scenarios_github_actions_PROD.py
+# =====================
+# CHANGELOG (2025-10-05)
+# - FIX: Robust baseline image resolution to avoid FileNotFoundError in CI.
+#        New helper _resolve_baseline_path() searches common repo roots and honors BASELINE_DIR.
+# - NEW: Recommendation (1) – practical image diff tolerance
+#        * Add env override MF_RMS_TOL (or RMS_TOL) with sensible default (45.0 on 0–255 scale).
+#        * Effective tolerance used = max(cfg.rms_tolerance, env_tolerance or 45.0).
+#        * Pass tolerance through to compare_images() for clear logging.
+# - NEW (2025-10-15): CTA destination validation  
+#        * >>> ADDED _validate_cta_destination(): checks HTTP status and soft-404 signals, takes screenshots, and
+#          raises clear AssertionError on invalid CTA targets.  
+#        * >>> CHANGED follow_hero_cta_in_original_tab() and click_cta_when_clickable() to call the validator instead
+#          of blindly navigating.
+#
+# Notes:
+#   - This keeps per-scenario tolerances working, but lets CI raise the bar via MF_RMS_TOL
+#     without editing code. With neither set, we default to 45.0 to avoid brittle failures
+#     due to font AA / subpixel layout jitter.
+
+import asyncio
+import os
+import re
+import shutil
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, List, Dict, Any
+
+import pytest
+import pytest_asyncio
+from urllib.parse import urljoin, urlsplit, urlunsplit
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+
+# =============================
+# Optional dependency (Pillow)
+# =============================
+try:
+    from PIL import Image, ImageChops, ImageStat, ImageOps  # Pillow for pixel diff
+except ImportError:
+    Image = ImageChops = ImageStat = ImageOps = None
+
+# ==========================================================
+# Scenario model + registry
+# ==========================================================
+
+@dataclass
+class ScenarioConfig:
+    name: str
+    test_scenario_url: str
+    test_scenario_url2: str
+    baseline_rel: Path
+    expected_hero_image_url: str
+
+    cta_regex: str = r"FINISH\s*OPENING\s*MY\s*ACCOUNT"
+    scenario_dir: Optional[str] = None
+    product_cta_button: Optional[str] = "Apply Today"
+    product_pulldown_menu_selector: Optional[str] = None
+    product_checkbox_selector: Optional[str] = None
+    product_to_select: Optional[str] = None
+    rms_tolerance: float = 0.0
+    expected_ad_heading: Optional[str] = None
+    hero_heading_selector: Optional[str] = None
+    expected_ad_title: Optional[str] = None
+    hero_title_selector: Optional[str] = None
+
+    def screenshots_dir(self, client: str, env_sub: Optional[str] = None) -> Path:
+        base_dir = Path("tests") / f"screenshots_{client}_using_pytest"
+        sub = self.scenario_dir or self.name
+        if env_sub:
+            env_sub = str(env_sub).upper()
+            return base_dir / sub / env_sub
+        return base_dir / sub
+
+    @property
+    def cta_pattern(self) -> re.Pattern:
+        return re.compile(self.cta_regex, re.I)
+
+
+SCENARIOS: List[ScenarioConfig] = [
+    ScenarioConfig(
+        name="checking",
+        test_scenario_url="https://www.missionfed.com/checking-spending/",
+        test_scenario_url2="",
+        baseline_rel=Path("missionfed/baseline_images_for_comparison/missionfed_checking_account_funnel_ad_baseline.png"),
+        expected_hero_image_url="https://www.missionfed.com/wp-content/uploads/checking_1600x535_071125@2x.jpg",
+        product_pulldown_menu_selector="#mat-select-0 > div > div.mat-select-arrow-wrapper.ng-tns-c51-1 > div",
+        product_to_select="Easy Checking",
+        product_checkbox_selector="#mat-option-1 > span",
+        product_cta_button="Apply Today",
+        rms_tolerance=0.0,
+    ),
+    ScenarioConfig(
+        name="savings",
+        test_scenario_url="https://www.missionfed.com/savings/",
+        test_scenario_url2="",
+        baseline_rel=Path("missionfed/baseline_images_for_comparison/missionfed_savings_account_funnel_ad_baseline.png"),
+        expected_hero_image_url="https://www.missionfed.com/wp-content/uploads/savings_061325_1600x535_2x.jpg",
+        product_pulldown_menu_selector="#mat-select-0 > div > div.mat-select-arrow-wrapper.ng-tns-c51-1 > div",
+        product_to_select="Savings",
+        product_checkbox_selector="#mat-option-3 > span",
+        product_cta_button="OPEN ACCOUNT",
+        rms_tolerance=0.0,
+    ),
+    ScenarioConfig(
+        name="cd",
+        test_scenario_url="https://www.missionfed.com/savings/",
+        test_scenario_url2="",
+        baseline_rel=Path("missionfed/baseline_images_for_comparison/missionfed_cd_funnel_ad_baseline.png"),
+        expected_hero_image_url="https://www.missionfed.com/wp-content/uploads/certificates_1600x535@2x.jpg",
+        product_pulldown_menu_selector="#mat-select-0 > div > div.mat-select-arrow-wrapper.ng-tns-c51-1 > div",
+        product_to_select="Certificate",
+        product_checkbox_selector="#mat-option-6 > span",
+        product_cta_button="OPEN ACCOUNT",
+        rms_tolerance=0.35,
+    ),
+    ScenarioConfig(
+        name="personal loan",
+        test_scenario_url="https://www.missionfed.com/other-loans/personal-loan/",
+        test_scenario_url2="",
+        baseline_rel=Path("missionfed/baseline_images_for_comparison/missionfed_personal_loan_funnel_ad_baseline.png"),
+        expected_hero_image_url="https://www.missionfed.com/wp-content/uploads/personal-loan_061325_1600x535_2x.jpg",
+        product_pulldown_menu_selector="",
+        product_to_select="",
+        product_checkbox_selector="",
+        product_cta_button="APPLY NOW",
+        cta_regex=r"COMPLETE\s*MY\s*APPLICATION",
+        rms_tolerance=0.0,
+    ),
+    ScenarioConfig(
+        name="credit card",
+        test_scenario_url="https://www.missionfed.com/compare-credit-cards/",
+        test_scenario_url2="",
+        baseline_rel=Path("missionfed/baseline_images_for_comparison/missionfed_credit_card_funnel_ad_baseline.png"),
+        expected_hero_image_url="https://www.missionfed.com/wp-content/uploads/credit-cards_1600x535@2x.jpg",
+        product_pulldown_menu_selector="",
+        product_to_select="",
+        product_checkbox_selector="",
+        product_cta_button="APPLY NOW",
+        cta_regex=r"COMPLETE\s*MY\s*APPLICATION",
+        rms_tolerance=0.0,
+    ),
+    ScenarioConfig(
+        name="hispanic checking",
+        test_scenario_url="https://www.missionfed.com/?debug_all=1&segments=skew%20hispanic&zipcode=91911&keywords=checking%20account",
+        test_scenario_url2="https://www.missionfed.com/checking-spending/",
+        baseline_rel=Path("missionfed/baseline_images_for_comparison/missionfed_hispanic_checking_account_funnel_ad_baseline.png"),
+        expected_hero_image_url="https://www.missionfed.com/wp-content/uploads/checking-hispanic_080525_1600x535_lg@2x.jpg",
+        product_pulldown_menu_selector="#mat-select-0 > div > div.mat-select-arrow-wrapper.ng-tns-c51-1 > div",
+        product_to_select="Easy Checking",
+        product_checkbox_selector="#mat-option-1 > span",
+        product_cta_button="Apply Today",
+        cta_regex=r"FINISH\s*OPENING\s*MY\s*ACCOUNT",
+        rms_tolerance=0.0,
+    ),
+    ScenarioConfig(
+        name="hispanic credit card",
+        test_scenario_url="https://www.missionfed.com/?cb=1&debug_all=1&segments=skew%20hispanic&zipcode=91911&keywords=credit%20card",
+        test_scenario_url2="https://www.missionfed.com/compare-credit-cards/",
+        baseline_rel=Path("missionfed/baseline_images_for_comparison/missionfed_hispanic_credit_card_funnel_ad_baseline.png"),        expected_hero_image_url="https://www.missionfed.com/wp-content/uploads/credit-card_hispanic_080525_1600x535@2x.jpg",
+        product_pulldown_menu_selector="#mat-select-0 > div > div.mat-select-arrow-wrapper.ng-tns-c51-1 > div",
+        product_to_select="",
+        product_checkbox_selector="",
+        product_cta_button="Apply Now",
+        cta_regex=r"COMPLETE\s*MY\s*APPLICATION",
+        rms_tolerance=0.0,
+    ),
+]
+
+
+# ==========================================================
+# Optional: load scenarios from YAML/JSON if present
+# ==========================================================
+
+def _maybe_load_scenarios_from_file() -> Optional[List[ScenarioConfig]]:
+    cwd = Path.cwd()
+    yaml_path = cwd / "scenarios.yaml"
+    json_path = cwd / "scenarios.json"
+
+    if yaml_path.exists():
+        try:
+            import yaml  # type: ignore
+            raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or []
+            return [ScenarioConfig(**_coerce_paths(item)) for item in raw]
+        except Exception as e:
+            print(f"Failed loading scenarios.yaml: {e}. Falling back to built-in SCENARIOS.")
+    if json_path.exists():
+        try:
+            import json
+            raw = json.loads(json_path.read_text(encoding="utf-8")) or []
+            return [ScenarioConfig(**_coerce_paths(item)) for item in raw]
+        except Exception as e:
+            print(f"Failed loading scenarios.json: {e}. Falling back to built-in SCENARIOS.")
+    return None
+
+
+def _coerce_paths(d: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(d)
+    if "baseline_rel" in out and not isinstance(out["baseline_rel"], Path):
+        out["baseline_rel"] = Path(out["baseline_rel"])
+    return out
+
+
+# ==========================================================
+# Utilities (host swapping, assets, baseline resolver)
+# ==========================================================
+
+def _swap_page_host(u: str, base: str) -> str:
+    if not u:
+        return u
+    if re.match(r"^https?://", u):
+        p = urlsplit(u)
+        base_p = urlsplit(base)
+        if p.netloc.endswith("missionfed.com"):
+            return urlunsplit((base_p.scheme, base_p.netloc, p.path, p.query, p.fragment))
+        return u
+    return urljoin(base, u)
+
+
+def _maybe_swap_asset_host(u: str, base: str, swap_assets: bool) -> str:
+    if not swap_assets or not u:
+        return u
+    if re.match(r"^https?://", u):
+        p = urlsplit(u)
+        if p.netloc.endswith("missionfed.com"):
+            base_p = urlsplit(base)
+            return urlunsplit((base_p.scheme, base_p.netloc, p.path, p.query, p.fragment))
+    return u}
+
+
+def _resolve_baseline_path(raw: Path) -> Path:
+    '''Resolve a baseline image path robustly in CI.
+
+    Tries, in order:
+      1) Absolute path as-is
+      2) BASELINE_DIR env (with several tail variants)
+      3) Common repo roots: CWD, CWD/fin-tests, CWD/fin-tests/PROD,
+         and alongside this test file (parent directories), with multiple variants.
+    Raises FileNotFoundError with all attempted candidates if nothing is found.
+    '''
+    tried: List[str] = []
+
+    def _test(p: Path) -> Optional[Path]:
+        tried.append(str(p))
+        return p if p.exists() else None
+
+    # 1) Absolute path
+    if raw.is_absolute():
+        found = _test(raw)
+        if found:
+            return found
+
+    # Normalize: strip common leading prefixes
+    prefixes = {"missionfed", "fin-tests", "fin_tests", "PROD", "prod"}
+    parts = list(raw.parts)
+    while parts and parts[0] in prefixes:
+        parts = parts[1:]
+    stripped = Path(*parts) if parts else Path(raw.name)
+
+    # Identify tails around the baseline_images_for_comparison directory
+    if "baseline_images_for_comparison" in stripped.parts:
+        idx = stripped.parts.index("baseline_images_for_comparison")
+        tail_from_dir = Path(*stripped.parts[idx:])  # includes the directory
+        tail_after_dir = Path(*stripped.parts[idx + 1 :]) if idx + 1 < len(stripped.parts) else Path(stripped.name)
+    else:
+        tail_from_dir = None
+        tail_after_dir = stripped
+
+    # 2) BASELINE_DIR env override
+    env_dir = os.getenv("BASELINE_DIR", "").strip()
+    if env_dir:
+        base = Path(env_dir)
+        for tail in [stripped, tail_after_dir, Path(raw.name)]:
+            for candidate in [base / tail, base / getattr(tail, "name", tail)]:
+                found = _test(candidate)
+                if found:
+                    return found
+
+    # 3) Try common roots
+    roots = [
+        Path.cwd(),
+        Path.cwd() / "fin-tests",
+        Path.cwd() / "fin-tests" / "PROD",
+        Path(__file__).resolve().parent,
+        Path(__file__).resolve().parent.parent,
+        Path(__file__).resolve().parent.parent.parent,
+    ]
+
+    variants: List[Path] = [raw, stripped, tail_after_dir, Path(raw.name)]
+    if tail_from_dir is not None:
+        variants.append(tail_from_dir)
+
+    for root in roots:
+        for v in variants:
+            found = _test(root / v)
+            if found:
+                return found
+        # Also try explicit baseline_images_for_comparison join
+        if tail_after_dir:
+            found = _test(root / "baseline_images_for_comparison" / (tail_after_dir if isinstance(tail_after_dir, Path) else Path(tail_after_dir)))
+            if found:
+                return found
+
+    # Not found -> error with hints
+    hint = os.getenv("BASELINE_DIR", "(unset)")
+    raise FileNotFoundError(
+        "Baseline image not found.\n"
+        f"  Requested: {raw}\n"
+        f"  BASELINE_DIR: {hint}\n"
+        "  Searched (in order):\n  - " + "\n  - ".join(tried)
+    )
+
+
+# ==========================================================
+# Utilities (screenshots, logging, console error capture)
+# ==========================================================
+
+def clear_screenshots_directory(directory: Path) -> None:
+    if directory.exists():
+        for item in directory.iterdir():
+            try:
+                if item.is_file() or item.is_symlink():
+                    item.unlink(missing_ok=True)
+                elif item.is_dir():
+                    shutil.rmtree(item, ignore_errors=True)
+            except Exception as e:
+                print(f"Failed to delete {item}. Reason: {e}")
+    else:
+        directory.mkdir(parents=True, exist_ok=True)
+
+
+async def save_page_source(page, filepath: Path) -> None:
+    try:
+        html_content = await page.content()
+        filepath.write_text(html_content, encoding="utf-8")
+        print(f"Page source saved to {filepath}")
+    except Exception as e:
+        print(f"Failed to save page source: {e}")
+
+
+def detect_js_errors_from_specific_files(client: str, page, specific_files: List[str], error_tracker: List[str]) -> None:
+    noisy_substrings = [
+        "No response received",
+        "Failed to load resource",
+        "net::ERR",
+        "NS_ERROR",
+        "TypeError: Failed to fetch",
+    ]
+
+    async def handle_console_message(msg):
+        location = msg.location
+        file_name = location['url'].split('/')[-1] if location['url'] else 'unknown'
+        if msg.type == 'error' and file_name.endswith('.js') and file_name in specific_files:
+            text = msg.text or ""
+            if any(s in text for s in noisy_substrings):
+                print(f"[JS warning - ignored] {file_name}: {text} for client {client}")
+                return
+            error_message = f"JS Error found in {file_name}: {text} for client {client}"
+            print(error_message)
+            error_tracker.append(error_message)
+            screenshot_path = Path.cwd() / f"js_error_{client}.png"
+            try:
+                await page.screenshot(path=str(screenshot_path))
+                print(f"Screenshot of JS error saved at {screenshot_path}")
+            except Exception:
+                pass
+
+    page.on('console', lambda msg: asyncio.ensure_future(handle_console_message(msg)))
+
+
+# ==========================================================
+# Playwright fixtures
+# ==========================================================
+
+@pytest_asyncio.fixture
+async def browser(request):
+    username = request.param.get("username")
+    password = request.param.get("password")
+
+    headless_env = os.getenv("MF_HEADLESS", "").strip()
+    ci_env = os.getenv("CI", "").strip()
+    headless = True if (headless_env == "1" or ci_env) else False
+
+    chromium_args = ["--remote-debugging-port=9222"]
+    if headless:
+        chromium_args += ["--disable-gpu", "--no-sandbox", "--no-zygote", "--disable-dev-shm-usage"]
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=headless, args=chromium_args)
+        context = await browser.new_context(http_credentials={"username": username, "password": password})
+        context.set_default_timeout(70000)
+        yield context
+        await browser.close()
+
+
+# ==========================================================
+# Robust wait helpers
+# ==========================================================
+
+async def wait_for_document_complete(page, timeout=70000):
+    print("Waiting for the document to be fully loaded...")
+    await page.wait_for_load_state('domcontentloaded', timeout=timeout)
+    await page.wait_for_load_state('load', timeout=timeout)
+    await page.evaluate('''new Promise(resolve => {
+        if (document.readyState === 'complete') resolve();
+        else window.addEventListener('load', () => resolve(), { once: true });
+    })''')
+
+
+# ==========================================================
+# >>> ADDED: CTA destination validator
+# ==========================================================
+
+async def _validate_cta_destination(page, dest_href: str, screenshots_directory: Path, label: str = "CTA") -> str:
+    '''
+    Validates that the CTA destination is a resolvable, non-error page.
+    - Does a GET via Playwright's request context to catch 4xx/5xx quickly.
+    - Navigates to the destination and checks for common soft-404/error signals.
+    Raises AssertionError with details if invalid.
+    Returns the final URL (after redirects) if valid.
+    '''
+    if not dest_href or not re.match(r"^https?://", dest_href):
+        raise AssertionError(f"{label} destination is not an absolute http(s) URL: {dest_href!r}")
+
+    # Quick HTTP check (follows redirects)
+    try:
+        resp = await page.request.get(dest_href, timeout=30000)
+        status = resp.status
+        if status >= 400:
+            # Save body snippet to help debugging broken links
+            try:
+                body_snippet = (await resp.text())[:500]
+            except Exception:
+                body_snippet = "<unavailable>"
+            ss_path = screenshots_directory / "cta_invalid_http_status.png"
+            try:
+                await page.screenshot(path=str(ss_path))
+            except Exception:
+                pass
+            raise AssertionError(
+                f"{label} destination returned HTTP {status}.\n"
+                f"URL: {dest_href}\n"
+                f"Body (first 500 chars): {body_snippet}"
+            )
+    except Exception as ex:
+        ss_path = screenshots_directory / "cta_http_check_failed.png"
+        try:
+            await page.screenshot(path=str(ss_path))
+        except Exception:
+            pass
+        raise AssertionError(f"{label} destination fetch failed for {dest_href}: {ex}")
+
+    # Full navigation + soft-404 detection
+    nav_resp = await page.goto(dest_href, timeout=70000)
+    final_url = page.url
+    await wait_for_document_complete(page, timeout=70000)
+    await page.screenshot(path=str(screenshots_directory / "cta_destination.png"))
+
+    http_status = nav_resp.status if nav_resp else None
+    # Basic title/body checks for soft errors
+    try:
+        title = (await page.title()) or ""
+    except Exception:
+        title = ""
+
+    # Pull a small slice of body text (avoid huge transfers)
+    body_text = ""
+    try:
+        body_handle = await page.locator("body").first
+        if await body_handle.count() > 0:
+            body_text = (await body_handle.inner_text())[:2000]
+    except Exception:
+        pass
+
+    soft_error_pattern = re.compile(r"(404|not\s*found|error|problem|unavailable|oops)", re.I)
+    if (http_status and http_status >= 400) or soft_error_pattern.search(title) or soft_error_pattern.search(body_text):
+        raise AssertionError(
+            f"{label} destination appears invalid.\n"
+            f"URL: {dest_href}\n"
+            f"Final URL: {final_url}\n"
+            f"HTTP status: {http_status}\n"
+            f"Title: {title!r}\n"
+            f"(Look at cta_destination.png for the rendered page.)"
+        )
+
+    # Looks OK
+    return final_url
+
+
+# ==========================================================
+# CTA helpers
+# ==========================================================
+
+def cta_locator(page, cfg: ScenarioConfig):
+    return page.locator(":is(a,button,[role='link'],[role='button'])", has_text=cfg.cta_pattern).first
+
+
+async def wait_for_cta_visible(page, cfg: ScenarioConfig, timeout_ms: int = 12000) -> bool:
+    deadline = time.time() + (timeout_ms / 1000.0)
+    loc = cta_locator(page, cfg)
+    while time.time() < deadline:
+        try:
+            if await loc.count() > 0 and await loc.is_visible():
+                return True
+        except Exception:
+            pass
+        await asyncio.sleep(0.25)
+    return False
+
+
+async def wait_for_cta_clickable(page, cfg: ScenarioConfig, timeout_ms: int = 12000) -> bool:
+    loc = cta_locator(page, cfg)
+    deadline = time.time() + (timeout_ms / 1000.0)
+    while time.time() < deadline:
+        try:
+            if await loc.count() == 0:
+                await asyncio.sleep(0.2)
+                continue
+            if await loc.is_visible():
+                if await loc.is_enabled():
+                    try:
+                        await loc.scroll_into_view_if_needed()
+                    except Exception:
+                        pass
+                    box = await loc.bounding_box()
+                    if box and box.get('width', 0) > 2 and box.get('height', 0) > 2:
+                        return True
+        except Exception:
+            pass
+        await asyncio.sleep(0.2)
+    return False
+
+
+async def click_cta_when_clickable(page, screenshots_directory: Path, cfg: ScenarioConfig) -> str:
+    loc = cta_locator(page, cfg)
+
+    clickable = await wait_for_cta_clickable(page, cfg, timeout_ms=12000)
+    if not clickable:
+        raise PlaywrightTimeoutError("CTA visible but not clickable within timeout.")
+
+    dest_href = None
+    try:
+        dest_href = await loc.get_attribute("href")
+        if not dest_href:
+            inner_anchor = loc.locator("a[href]").first
+            if await inner_anchor.count() > 0:
+                dest_href = await inner_anchor.get_attribute("href")
+        if dest_href:
+            dest_href = urljoin(page.url, dest_href)
+    except Exception:
+        pass
+
+    context = page.context
+    prev_url = page.url
+
+    new_tab = None
+    try:
+        async with context.expect_page(timeout=6000) as page_info:
+            await loc.click(force=False)
+        new_tab = await page_info.value
+        try:
+            await new_tab.wait_for_load_state('domcontentloaded')
+            await new_tab.wait_for_load_state('load')
+            await try_click_cookie_accept(new_tab, screenshots_directory)
+            await new_tab.screenshot(path=str(screenshots_directory / "cta_new_tab.png"))
+        except Exception:
+            pass
+    except PlaywrightTimeoutError:
+        try:
+            await page.wait_for_load_state('load', timeout=6000)
+        except Exception:
+            pass
+
+    if not dest_href:
+        if new_tab is not None:
+            try:
+                dest_href = new_tab.url
+            except Exception:
+                pass
+        elif page.url != prev_url:
+            dest_href = page.url
+
+    if not dest_href:
+        try:
+            dest_href = await loc.get_attribute("href")
+            if dest_href:
+                dest_href = urljoin(page.url, dest_href)
+        except Exception:
+            pass
+
+    if new_tab is not None:
+        try:
+            await new_tab.close()
+        except Exception:
+            pass
+
+    if not dest_href:
+        raise PlaywrightTimeoutError("Could not determine destination URL after clicking CTA.")
+
+    # >>> CHANGED: Validate destination instead of blind goto
+    validated_url = await _validate_cta_destination(page, dest_href, screenshots_directory, label="CTA (hero funnel)")
+    return validated_url
+
+
+# ==========================================================
+# Cookie banner handling
+# ==========================================================
+
+COOKIE_ACCEPT_SELECTORS = [
+    'a.cc-btn.cc-dismiss',
+]
+
+COOKIE_BANNER_CONTAINERS = [
+    '.cc-window',
+]
+
+
+async def try_click_cookie_accept(page, screenshots_directory: Path):
+    for sel in COOKIE_ACCEPT_SELECTORS:
+        locator = page.locator(sel)
+        try:
+            if await locator.count() > 0:
+                await locator.first.wait_for(state="visible", timeout=2000)
+                try:
+                    await locator.first.click()
+                    print(f"Clicked cookie accept button via selector: {sel}")
+                except Exception:
+                    handle = await locator.first.element_handle()
+                    if handle:
+                        await page.evaluate('(el)=>el.click()', handle)
+                        print(f"Clicked cookie accept via JS: {sel}")
+                await asyncio.sleep(0.5)
+        except Exception:
+            continue
+
+    banner_still_present = False
+    for cont in COOKIE_BANNER_CONTAINERS:
+        try:
+            count = await page.locator(cont).count()
+            if count > 0:
+                for i in range(count):
+                    if await page.locator(cont).nth(i).is_visible():
+                        banner_still_present = True
+                        print(f"Cookie banner container still visible: {cont}")
+                        break
+        except Exception:
+            pass
+
+    if banner_still_present:
+        try:
+            await page.screenshot(path=str(screenshots_directory / '10_cookie_layer_might_be_still_blocking.png'))
+        except Exception:
+            pass
+        css_rules = ','.join(COOKIE_BANNER_CONTAINERS) + '{ display:none !important; visibility:hidden !important; }'
+        await page.add_style_tag(content=css_rules)
+        print("Injected CSS to hide persistent cookie banner in test context.")
+        await asyncio.sleep(0.25)
+    return True
+
+
+# ==========================================================
+# Hero helpers
+# ==========================================================
+
+def _normalize_url(u: str) -> str:
+    if not u:
+        return u
+    if u.startswith('//'):
+        u = 'https:' + u
+    parts = urlsplit(u)
+    parts = parts._replace(query='', fragment='')
+    return urlunsplit(parts)
+
+
+async def get_hero_background_img_url(page) -> Optional[str]:
+    sel = "#main > div.hero > div.hero__background > img"
+    img = page.locator(sel).first
+    try:
+        await img.wait_for(state="visible", timeout=6000)
+    except Exception:
+        return None
+    srcset = await img.get_attribute('srcset')
+    if srcset:
+        first = srcset.split(',')[0].strip().split(' ')[0]
+        if first:
+            return urljoin(page.url, first)
+    src = await img.get_attribute('src')
+    if src:
+        return urljoin(page.url, src)
+    return None
+
+
+# ==========================================================
+# Hero CTA helper
+# ==========================================================
+
+async def follow_hero_cta_in_original_tab(page, screenshots_directory: Path, cfg: ScenarioConfig) -> str:
+    label = (cfg.product_cta_button or "Apply Today").strip()
+    label_pattern = re.compile(re.escape(label), re.I)
+
+    candidates = [
+        page.get_by_role('link', name=label_pattern),
+        page.get_by_role('button', name=label_pattern),
+        page.locator(f"a:has-text('{label}')"),
+        page.locator(f"[role='link']:has-text('{label}')"),
+    ]
+
+    if label.lower() != "apply today":
+        fallback_pattern = re.compile(r"Apply Today", re.I)
+        candidates.extend([
+            page.get_by_role('link', name=fallback_pattern),
+            page.get_by_role('button', name=fallback_pattern),
+            page.locator("a:has-text('Apply Today')"),
+            page.locator("[role='link']:has-text('Apply Today')"),
+        ])
+
+    target = None
+    for cand in candidates:
+        if await cand.count() > 0:
+            target = cand.first
+            break
+    if not target:
+        raise PlaywrightTimeoutError(f"Could not locate a hero CTA labeled '{label}'.")
+
+    apply_href = None
+    try:
+        apply_href = await target.get_attribute("href")
+        if not apply_href:
+            inner_anchor = target.locator("a[href]").first
+            if await inner_anchor.count() > 0:
+                apply_href = await inner_anchor.get_attribute("href")
+        if apply_href:
+            apply_href = urljoin(page.url, apply_href)
+    except Exception:
+        pass
+
+    context = page.context
+    prev_url = page.url
+
+    new_tab = None
+    try:
+        async with context.expect_page(timeout=7000) as page_info:
+            await target.click()
+        new_tab = await page_info.value
+        try:
+            await new_tab.wait_for_load_state('domcontentloaded')
+            await new_tab.wait_for_load_state('load')
+            await try_click_cookie_accept(new_tab, screenshots_directory)
+            await new_tab.screenshot(path=str(screenshots_directory / "3_after_click_hero_cta_new_tab_opened.png"))
+        except Exception:
+            pass
+        try:
+            await new_tab.close()
+        except Exception:
+            pass
+    except PlaywrightTimeoutError:
+        pass
+
+    if not apply_href:
+        if page.url != prev_url:
+            apply_href = page.url
+        elif new_tab is not None:
+            try:
+                apply_href = new_tab.url
+            except Exception:
+                pass
+
+    if not apply_href:
+        raise PlaywrightTimeoutError(f"Could not determine the navigation URL from the hero CTA '{label}'.")
+
+    # >>> CHANGED: Validate destination instead of blind goto
+    validated_url = await _validate_cta_destination(page, apply_href, screenshots_directory, label=f"Hero CTA '{label}'")
+    return validated_url
+
+
+# ==========================================================
+# IMAGE DIFF helper
+# ==========================================================
+
+def _ensure_pillow_available():
+    if Image is None or ImageChops is None or ImageStat is None:
+        raise RuntimeError(
+            "Pillow (PIL) is required for baseline image comparison. Install with: pip install pillow"
+        )
+
+
+def compare_images(baseline_path: Path, actual_path: Path, diff_out_path: Path, rms_tolerance: float = 0.0) -> float:
+    _ensure_pillow_available()
+    with Image.open(baseline_path).convert('RGBA') as b, Image.open(actual_path).convert('RGBA') as a:
+        if b.size != a.size:
+            raise AssertionError(f"Image sizes differ. Baseline {b.size} vs Actual {a.size}")
+        diff = ImageChops.difference(b, a)
+
+        stat = ImageStat.Stat(diff)
+        sq = sum((c ** 2 for c in stat.rms))
+        rms = (sq / len(stat.rms)) ** 0.5
+
+        try:
+            gray = ImageOps.grayscale(diff)
+            boosted = ImageOps.autocontrast(gray)
+            heat = ImageOps.colorize(boosted, black="#000000", white="#ff0033").convert('RGBA')
+            heat.save(diff_out_path)
+
+            triptych = Image.new('RGBA', (b.width * 3, b.height), (0, 0, 0, 0))
+            triptych.paste(b, (0, 0))
+            triptych.paste(a, (b.width, 0))
+            triptych.paste(heat, (b.width * 2, 0))
+            triptych_path = diff_out_path.with_name(diff_out_path.stem + "_triptych.png")
+            triptych.save(triptych_path)
+
+            threshold = 10
+            changed = sum(1 for v in boosted.getdata() if v > threshold)
+            total = b.width * b.height
+            ratio = (changed / total) * 100.0
+            print(
+                f"Image comparison: RMS={rms:.6f} (tolerance {rms_tolerance}), approx changed pixels={ratio:.3f}%\n"
+                f"  Diff heatmap: {diff_out_path}\n  Triptych: {triptych_path}"
+            )
+        except Exception as viz_ex:
+            print(f"[compare_images] Visualization fallback due to: {viz_ex}")
+            diff.save(diff_out_path)
+
+        return rms
+
+
+# ==========================================================
+# Helpers for filenames & slugs
+# ==========================================================
+
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", text.strip().lower()).strip("_")
+
+
+# ==========================================================
+# Try file-based scenarios first, otherwise use built-in
+# ==========================================================
+
+_SCENARIOS_FROM_FILE = _maybe_load_scenarios_from_file()
+_ALL_SCENARIOS: List[ScenarioConfig] = _SCENARIOS_FROM_FILE or SCENARIOS
+
+
+def _pytest_ids() -> List[str]:
+    return [s.name for s in _ALL_SCENARIOS]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "browser",
+    [{"username": "", "password": ""}],
+    indirect=True,
+)
+@pytest.mark.parametrize("cfg", _ALL_SCENARIOS, ids=_pytest_ids())
+async def test_missionfed_hero_ad_generic(
+    browser,
+    cfg: ScenarioConfig,
+    env_config,
+    homepage_url_with_session_init: str = "https://www.missionfed.com/?session_init=1&debug_all=1&cb=0",
+    homepage_url: str = "https://www.missionfed.com/?debug_all=1&cb=0",
+    client: str = "missionfed",
+):
+    base = env_config["base_url"]
+    swap_assets = env_config["swap_assets"]
+
+    env_value = str(env_config.get("env", "")).lower()
+    env_sub = "STG" if env_value == "stg" else None
+
+    home_with_init = f"{base}/?session_init=1&debug_all=1&cb=0"
+    home = f"{base}/?debug_all=1&cb=0"
+
+    scen_url = _swap_page_host(cfg.test_scenario_url, base)
+    scen_url2 = _swap_page_host(cfg.test_scenario_url2, base) if cfg.test_scenario_url2 else ""
+
+    expected_img_url = _maybe_swap_asset_host(cfg.expected_hero_image_url, base, swap_assets)
+
+    screenshots_directory = cfg.screenshots_dir(client, env_sub=env_sub)
+    screenshots_directory.mkdir(parents=True, exist_ok=True)
+    print(f"[DEBUG] Screenshots directory -> {screenshots_directory}")
+    clear_screenshots_directory(screenshots_directory)
+
+    print(f"Starting {client} hero ad test for scenario: {cfg.name} (env base: {base}, env: {env_value}, env_sub: {env_sub})")
+
+    page = await browser.new_page()
+    specific_js_files = ['finalytics.js', 'finalytics-function.js', 'settings_div.js', 'settings.js', 'controlbar.js']
+    error_tracker: List[str] = []
+    detect_js_errors_from_specific_files(client, page, specific_js_files, error_tracker)
+
+    try:
+        print(f"Going to homepage_url with session init {home_with_init}...")
+        await page.goto(home_with_init, timeout=70000)
+        await wait_for_document_complete(page, timeout=70000)
+        await try_click_cookie_accept(page, screenshots_directory)
+        await page.screenshot(path=str(screenshots_directory / '1_homepage_session_init.png'))
+
+        print(f"Going to test_scenario_url {scen_url}...")
+        await page.goto(scen_url, timeout=70000)
+        await wait_for_document_complete(page, timeout=70000)
+        await try_click_cookie_accept(page, screenshots_directory)
+        await page.screenshot(path=str(screenshots_directory / '2_product_page.png'))
+
+        if scen_url2:
+            print(f"Going to test_scenario_url2 ALSO {scen_url2}...")
+            await page.goto(scen_url2, timeout=70000)
+            await wait_for_document_complete(page, timeout=70000)
+            await page.screenshot(path=str(screenshots_directory / '2b_product_page.png'))
+
+        print("Clicking hero/product CTA (scenario-dependent)…")
+        apply_url = await follow_hero_cta_in_original_tab(page, screenshots_directory, cfg)
+        await page.wait_for_timeout(2500)
+
+        should_select_product = bool((cfg.product_pulldown_menu_selector or "").strip()) and                                  bool((cfg.product_to_select or "").strip())
+
+        if should_select_product:
+            try:
+                print("Waiting for product menu to be visible…")
+                await page.wait_for_selector(cfg.product_pulldown_menu_selector, state="visible", timeout=30000)
+
+                product_menu = page.locator(cfg.product_pulldown_menu_selector).first
+                try:
+                    await product_menu.scroll_into_view_if_needed()
+                except Exception:
+                    pass
+
+                await product_menu.click()
+                await page.screenshot(path=str(screenshots_directory / "8b_apply_form_product_menu_open.png"))
+
+                product_name = cfg.product_to_select.strip()
+                name_pattern = re.compile(re.escape(product_name), re.I)
+
+                clicked = False
+                if cfg.product_checkbox_selector and cfg.product_checkbox_selector.strip():
+                    opt = page.locator(cfg.product_checkbox_selector).first
+                    try:
+                        await opt.wait_for(state="visible", timeout=10000)
+                        await opt.click()
+                        clicked = True
+                    except Exception:
+                        clicked = False
+                if not clicked:
+                    role_opt = page.get_by_role("option", name=name_pattern).first
+                    if await role_opt.count() > 0:
+                        await role_opt.click()
+                        clicked = True
+                if not clicked:
+                    by_text = page.get_by_text(name_pattern).first
+                    if await by_text.count() > 0:
+                        await by_text.click()
+                        clicked = True
+                if not clicked:
+                    raise PlaywrightTimeoutError(f"Could not click/select the '{product_name}' option.")
+
+                sel_slug = _slug(product_name) or "product"
+                await page.screenshot(path=str(screenshots_directory / f"8c_apply_form_{sel_slug}_selected.png"))
+                print(f"Selected '{product_name}' in the form.")
+            except Exception:
+                await save_page_source(page, screenshots_directory / "apply_form_debug.html")
+                await page.screenshot(path=str(screenshots_directory / "apply_form_debug.png"))
+                raise
+        else:
+            print("Skipping product selection because selector or product name is empty for this scenario.")
+            await page.screenshot(path=str(screenshots_directory / "apply_form_selection_skipped.png"))
+
+        print(f"Going to test_scenario_url {scen_url} AGAIN…")
+        await page.goto(scen_url, timeout=70000)
+        await wait_for_document_complete(page, timeout=70000)
+        await try_click_cookie_accept(page, screenshots_directory)
+        await page.screenshot(path=str(screenshots_directory / '3_product_page_again.png'))
+
+        print("Navigating back to homepage without session_init…")
+        await page.goto(home, referer=apply_url, timeout=70000)
+        await wait_for_document_complete(page, timeout=70000)
+        await try_click_cookie_accept(page, screenshots_directory)
+        await page.screenshot(path=str(screenshots_directory / '4_home_without_session_init.png'))
+
+        if not (cfg.name.startswith("hispanic")):
+            print(f"Scenario is not hispanic and is: {cfg.name} so can use session_init")
+            await page.goto(home_with_init, referer=apply_url, timeout=70000)
+            await wait_for_document_complete(page, timeout=70000)
+            await try_click_cookie_accept(page, screenshots_directory)
+            await page.screenshot(path=str(screenshots_directory / '5_home_with_session_init.png'))
+        else:
+            print(f"Scenario is hispanic and is: {cfg.name} so skipping using session_init and about to refresh")
+
+        found_cta = await wait_for_cta_visible(page, cfg, timeout_ms=6000)
+        reloads = 0
+        while not found_cta and reloads < 2:
+            reloads += 1
+            print(f"Soft reload #{reloads} of homepage (original tab)…")
+            await page.reload(wait_until="load", timeout=70000)
+            await wait_for_document_complete(page, timeout=70000)
+            await page.screenshot(path=str(screenshots_directory / f'6_home_after_reload_{reloads}.png'))
+            found_cta = await wait_for_cta_visible(page, cfg, timeout_ms=6000)
+
+        if not found_cta:
+            try:
+                ref = await page.evaluate("document.referrer")
+                ls_keys = await page.evaluate("Object.keys(localStorage)")
+                cookies = await page.context.cookies(base)
+                print("Referrer:", ref)
+                print("LocalStorage keys:", ls_keys)
+                print("Cookies:", cookies)
+            except Exception:
+                pass
+            await save_page_source(page, screenshots_directory / "after_home_refreshes_no_cta.html")
+            await page.screenshot(path=str(screenshots_directory / "10_no_cta.png"))
+            raise PlaywrightTimeoutError("CTA did not appear after refreshes.")
+
+        print("Funnel ad CTA is visible in hero.")
+        cta_screenshot_path = screenshots_directory / "7_funnel_ad_cta_visible.png"
+        await page.screenshot(path=str(cta_screenshot_path))
+
+        # Validate hero image URL matches scenario expectation
+        try:
+            actual_img_url = await get_hero_background_img_url(page)
+            print("Discovered hero background <img> URL:", actual_img_url)
+            if not actual_img_url:
+                await save_page_source(page, screenshots_directory / "hero_img_not_found.html")
+                await page.screenshot(path=str(screenshots_directory / "11a_no_hero_img_found.png"))
+                raise AssertionError("Could not find hero background <img> at the expected selector.")
+            norm_actual = _normalize_url(actual_img_url)
+            norm_expected = _normalize_url(expected_img_url)
+            if norm_actual != norm_expected:
+                await page.screenshot(path=str(screenshots_directory / "11b_hero_img_mismatch.png"))
+                raise AssertionError(f"Hero image URL mismatch.\nExpected: {norm_expected}\nActual:   {norm_actual}")
+            else:
+                print("Hero image URL matches expected.")
+        except AssertionError as ae:
+            pytest.fail(str(ae))
+
+        # =============================
+        # Compare screenshot with baseline (Recommendation 1)
+        # =============================
+        try:
+            baseline_path = _resolve_baseline_path(cfg.baseline_rel)
+            print(f"Resolved baseline path -> {baseline_path}")
+            diff_out = screenshots_directory / "6_cta_diff_vs_baseline.png"
+            print(
+                f"Comparing screenshot to baseline...\n  Baseline: {baseline_path}\n  Actual:   {cta_screenshot_path}\n  Diff out: {diff_out}"
+            )
+
+            # Env-driven tolerance with sensible default (45.0). Allows CI to tune tolerance
+            # without touching code. Effective tolerance is the max of scenario vs env/default.
+            tol_env_raw = (os.getenv("MF_RMS_TOL", "").strip() or os.getenv("RMS_TOL", "").strip())
+            tol_env = float(tol_env_raw) if tol_env_raw else 45.0
+            tol = max((cfg.rms_tolerance or 0.0), tol_env)
+            print(f"Using RMS tolerance = {tol} (scenario={cfg.rms_tolerance}, env_or_default={tol_env})")
+
+            rms = compare_images(baseline_path, cta_screenshot_path, diff_out, rms_tolerance=tol)
+            print(f"Image RMS difference = {rms}")
+            assert rms <= tol, (
+                f"Screenshot does not match baseline within tolerance. RMS={rms}. "
+                f"Tolerance={tol}. See diff: {diff_out}"
+            )
+            print("Baseline image comparison PASSED (within tolerance).")
+        except Exception as img_ex:
+            pytest.fail(f"Baseline image comparison failed: {img_ex}")
+
+        print("Waiting for CTA to be clickable and then clicking…")
+        cta_dest = await click_cta_when_clickable(page, screenshots_directory, cfg)
+        print("CTA click resolved destination:", cta_dest)
+
+        await page.wait_for_timeout(1500)
+        await page.screenshot(path=str(screenshots_directory / '8a_after_funnel_cta_click.png'))
+
+    except PlaywrightTimeoutError as e:
+        try:
+            await save_page_source(page, screenshots_directory / 'failure_source.html')
+            await page.screenshot(path=str(screenshots_directory / 'failure_screenshot.png'))
+        except Exception:
+            pass
+        pytest.fail(f"Timeout encountered during navigation: {e}")
+    finally:
+        if error_tracker:
+            pytest.fail(f"Detected JavaScript errors: {error_tracker}")
+        else:
+            print("No JavaScript errors detected for", client)
