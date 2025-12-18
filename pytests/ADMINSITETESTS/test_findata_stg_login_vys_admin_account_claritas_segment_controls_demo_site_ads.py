@@ -15,22 +15,24 @@ class ProductToSegmentMappingPage:
     """Page object for product to segment mapping functionality."""
     def __init__(self, page):
         self.page = page
-        self.admin_link = page.get_by_text("Admin").nth(0)
-        self.content_nav_link = page.get_by_text("Content").nth(0)
-        self.product_segment_mapping_link = page.get_by_text("Product to Segment Mapping")
-        
-    def navigate_to_product_segment_mapping(self, screenshots_directory):
-        self.admin_link.click()
-        self.page.screenshot(path=f'{screenshots_directory}2_after_clicked_admin_top_nav.png')
-        self.page.wait_for_load_state("networkidle")
 
-        self.content_nav_link.wait_for(state="visible", timeout=30000)
-        self.content_nav_link.click()
-        self.page.wait_for_load_state("networkidle")
+    def navigate_to_product_segment_mapping(self, screenshots_directory, test_env):
+        """
+        Navigate directly to the Product to Segment Mapping page.
 
-        self.product_segment_mapping_link.wait_for(state="visible", timeout=30000)
-        self.product_segment_mapping_link.click()
+        CHANGED on 12/17/2025: Direct navigation to /ai-settings/product-mapping instead of
+        clicking through Settings → Segments → Product Mapping menu path.
+        Reason: Menu navigation became unreliable due to hidden dropdown elements that remain
+        hidden even after clicking parent menu items. Direct URL navigation is more reliable.
+        """
+        # Navigate directly to the product mapping URL
+        product_mapping_url = f'https://{test_env}finalyticsdata.com/ai-settings/product-mapping'
+        self.page.goto(product_mapping_url)
+        print(f"Navigated directly to Product Mapping page: {product_mapping_url}")
+
+        # Wait for the page to fully load
         self.page.wait_for_load_state("networkidle")
+        self.page.wait_for_load_state("domcontentloaded")
 
 class EasterlyDemoPage:
     """Page object for Easterly demo site functionality."""
@@ -71,12 +73,13 @@ def test_claritas_segment_controls_demo_site_ads(admin_browser_context_sync):
     validate_admin_login_success(page, test_env)
     
     try:
-        # Navigate to product segment mapping
-        product_mapping_page.navigate_to_product_segment_mapping(screenshots_directory)
+        # Navigate to product segment mapping (direct URL navigation)
+        product_mapping_page.navigate_to_product_segment_mapping(screenshots_directory, test_env)
         page.screenshot(path=f'{screenshots_directory}3_product_segment_mapping_page.png')
         
         # Navigate to demo site to verify ads
-        demo_url = f"https://{test_env}easterly.com"
+        # Corrected demo URL format based on old script: uses finalyticsdemo.com with api=stg parameter
+        demo_url = f"https://www.{test_env}finalyticsdemo.com/?api=stg"
         demo_page.navigate_to_demo_site(demo_url)
         page.screenshot(path=f'{screenshots_directory}4_demo_site_with_ads.png')
         

@@ -457,7 +457,8 @@ def validate_admin_login_success(page, test_env, expected_permissions=None):
     """
     
     # Verify URL redirect to admin home
-    sync_expect(page).to_have_url(f'https://{test_env}finalyticsdata.com/admin/')
+    # UPDATED on 12/17/25 since URL changed to https://{test_env}finalyticsdata.com/ after login
+    sync_expect(page).to_have_url(f'https://{test_env}finalyticsdata.com/')
     
     # Validate server errors
     validate_no_server_error(page)

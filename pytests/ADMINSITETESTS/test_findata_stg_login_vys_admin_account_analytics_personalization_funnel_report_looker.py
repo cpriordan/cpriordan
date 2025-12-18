@@ -15,15 +15,16 @@ class AnalyticsPage:
     """Page object for analytics functionality."""
     def __init__(self, page):
         self.page = page
-        self.admin_link = page.get_by_text("Admin").nth(0)
-        self.analytics_nav_link = page.get_by_text("Analytics")
-        self.personalization_funnel_link = page.get_by_text("Personalization Funnel Report")
-        
+        # self.admin_link = page.get_by_text("Admin").nth(0)  # Admin link no longer exists after login
+        self.analytics_nav_link = page.get_by_text("Analytics").first  # Use .first to get the nav link
+        self.personalization_funnel_link = page.get_by_text("Application Funnel")  # Link changed from "Personalization Funnel Report"
+
     def navigate_to_analytics(self, screenshots_directory):
-        self.admin_link.click()
-        print("Clicked Admin link...")
-        self.page.screenshot(path=f'{screenshots_directory}2_after_clicked_admin_top_nav.png')
-        self.page.wait_for_load_state("networkidle")
+        # Admin link is no longer needed - Analytics is directly accessible in left nav after login
+        # self.admin_link.click()
+        # print("Clicked Admin link...")
+        # self.page.screenshot(path=f'{screenshots_directory}2_after_clicked_admin_top_nav.png')
+        # self.page.wait_for_load_state("networkidle")
 
         self.analytics_nav_link.wait_for(state="visible", timeout=30000)
         self.analytics_nav_link.click()
@@ -33,7 +34,7 @@ class AnalyticsPage:
     def navigate_to_personalization_funnel_report(self):
         self.personalization_funnel_link.click()
         self.page.wait_for_load_state("networkidle")
-        print("Navigated to Personalization Funnel Report")
+        print("Navigated to Application Funnel")
         return AnalyticsPage(self.page)
 
     def take_screenshot(self, path):
