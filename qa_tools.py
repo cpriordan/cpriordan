@@ -457,8 +457,12 @@ def validate_admin_login_success(page, test_env, expected_permissions=None):
     """
     
     # Verify URL redirect to admin home
-    # UPDATED on 12/17/25 since URL changed to https://{test_env}finalyticsdata.com/ after login
-    sync_expect(page).to_have_url(f'https://{test_env}finalyticsdata.com/')
+    # UPDATED on 12/17/25 to accept both / and /admin/ redirect patterns
+    # Different account types redirect to different URLs:
+    # - VYS admin accounts: https://{test_env}finalyticsdata.com/
+    # - TRU staff accounts: https://{test_env}finalyticsdata.com/admin/
+    import re
+    sync_expect(page).to_have_url(re.compile(f'https://{test_env}finalyticsdata.com(/|/admin/)'))
     
     # Validate server errors
     validate_no_server_error(page)
