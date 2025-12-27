@@ -1,10 +1,11 @@
 import pytest
+import time
 from playwright.sync_api import expect
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 from qa_tools import (
-    AdminLoginPage, 
+    AdminLoginPage,
     setup_admin_test_environment,
     admin_browser_context_sync,
     clear_screenshots_directory,
@@ -30,6 +31,89 @@ class PublishUnpublishPage:
         self.existing_production_group = page.get_by_text("Core Products Publish and Test | Mode:Prod")
         self.publish_confirmation_button = page.get_by_text("Publish!")
         self.unpublish_button = page.get_by_text("Unpublish Selected Scenarios")
+
+    def create_test_scenario(self, screenshots_directory):
+        """Create a test scenario in the 'Test Core Products Publish and Test' campaign."""
+        print("Creating test scenario for publish/unpublish test...")
+
+        # Navigate: Scenarios > Create New Scenario > Create a Single Scenario
+        self.scenarios_menu_link.wait_for(state="visible", timeout=30000)
+        self.scenarios_menu_link.click()
+        print("Clicked Scenarios link...")
+        self.page.wait_for_load_state("networkidle")
+
+        create_new_scenario_link = self.page.get_by_text("Create New Scenario")
+        create_new_scenario_link.wait_for(state="visible", timeout=30000)
+        create_new_scenario_link.click()
+        print("Clicked Create New Scenario link...")
+        self.page.wait_for_load_state("networkidle")
+
+        create_single_scenario_link = self.page.get_by_text("Create a Single Scenario").first
+        create_single_scenario_link.wait_for(state="visible", timeout=30000)
+        create_single_scenario_link.click()
+        print("Clicked Create a Single Scenario link...")
+        self.page.wait_for_load_state("networkidle")
+
+        # Step 1: Check "Target a Product" and continue
+        target_product_checkbox = self.page.get_by_label("Target a Product")
+        target_product_checkbox.check()
+        self.page.wait_for_load_state("networkidle")
+        print("Checked Target a Product checkbox...")
+
+        continue_button = self.page.get_by_text("Continue").first
+        continue_button.click()
+        self.page.wait_for_load_state("networkidle")
+
+        # Step 2: Select Car Loan > Home Page > Template
+        car_loan_link = self.page.get_by_text("Car Loan").first
+        car_loan_link.click()
+        self.page.wait_for_load_state("networkidle")
+
+        home_page_link = self.page.get_by_text("Home Page")
+        home_page_link.click()
+        self.page.wait_for_load_state("networkidle")
+
+        template_link = self.page.get_by_text("Trustone Financial | home hero")
+        template_link.click()
+        self.page.wait_for_load_state("networkidle")
+        print("Selected template...")
+
+        # Step 3: Fill in content
+        scenario_name = f"Test Scenario {int(time.time())}"
+        self.page.get_by_label("Scenario Name").fill(scenario_name)
+        self.page.get_by_label("Headline").fill("Test Car Loan Offer")
+        self.page.get_by_label("Subheader").fill("Great rates on auto loans")
+        self.page.get_by_label("Body copy").fill("Get pre-approved today.")
+        print(f"Filled in content for scenario: {scenario_name}")
+
+        # Save and Continue to Step 4
+        save_continue_button = self.page.get_by_role("button", name="Save and Continue")
+        save_continue_button.click()
+        self.page.wait_for_load_state("networkidle")
+
+        # Step 4: Select "Test Core Products Publish and Test" scenario group
+        try:
+            test_group = self.page.get_by_text("Test Core Products Publish and Test | Mode:Test (Published)")
+            test_group.wait_for(state="visible", timeout=10000)
+            test_group.click()
+        except:
+            # Try partial match if exact doesn't work
+            test_group = self.page.get_by_text("Test Core Products Publish", exact=False).first
+            test_group.scroll_into_view_if_needed()
+            test_group.click()
+        print("Selected Test Core Products Publish and Test campaign...")
+        self.page.wait_for_load_state("networkidle")
+
+        # Click Continue to complete wizard
+        continue_button = self.page.get_by_text("Continue").first
+        continue_button.click()
+        self.page.wait_for_load_state("networkidle")
+
+        # Verify success
+        success_message = self.page.get_by_text("Scenario Setup Complete")
+        success_message.wait_for(state="visible", timeout=30000)
+        print(f"Successfully created scenario: {scenario_name}")
+        self.page.screenshot(path=f'{screenshots_directory}0_scenario_created.png')
 
     def navigate_to_publish_unpublish(self):
         """Navigate to Publish/Unpublish Scenarios page."""
@@ -133,13 +217,16 @@ def test_publish_and_unpublish_campaign(admin_browser_context_sync):
     login_page.navigate(test_env)
     login_page.login(findata_user, findata_pw)
     otp_code = login_page.enter_2fa_code(totp)
-    page.get_by_role("button", name="Login").click()
-    
+    login_page.complete_2fa_login(test_env)
+
     # Validate login success
     login_page.take_screenshot(f'{screenshots_directory}1_successful_login_using_2fa.png')
     validate_admin_login_success(page, test_env)
-    
+
     try:
+        # Create a test scenario to ensure the campaign has content to publish
+        publish_page.create_test_scenario(screenshots_directory)
+
         # Navigate to Publish/Unpublish Scenarios page
         publish_page.navigate_to_publish_unpublish()
         page.screenshot(path=f'{screenshots_directory}1_publish_unpublish_page.png')

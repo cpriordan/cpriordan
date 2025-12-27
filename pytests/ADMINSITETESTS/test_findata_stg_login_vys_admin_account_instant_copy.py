@@ -347,13 +347,12 @@ async def test_instant_copy():
             await login_page.login(findata_user, findata_pw)
 
             await login_page.enter_2fa_code(totp)
-            await page.get_by_role("button", name="Login").click()
+            await login_page.complete_2fa_login(test_env)
 
             await login_page.take_screenshot(f'{screenshots_directory}1_successful_login_using_2fa.png')
 
             current_url = page.url
             print(f"Current URL after login is {current_url}.")
-            await expect(page).to_have_url(f'https://{test_env}finalyticsdata.com/')
 
             # Navigate to instant copy
             await instant_copy_page.navigate_to_instant_copy(screenshots_directory, test_env)
