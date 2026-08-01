@@ -1,0 +1,79 @@
+# NEW: GitHub Actions workflow to run OneAZ BusinessAd OCR-only hero test with Playwright + Tesseract
+name: OneAZ Business Ad Hero test using OCR
+
+# DE-ACTIVATED SINCE CAUSE PIXEL DIFFERENCE WITH BACKGROUN CHANGE
+on:
+    workflow_dispatch: # Allow manual runs from GitHub UI
+#   push:
+#     branches: ["**"]
+#   pull_request:
+#     branches: ["**"]
+#   schedule:
+#     - cron: "0 13 * * *"
+
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # Force headless in CI
+      HEADLESS: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system deps (Tesseract)
+        run: |
+          sudo apt-get update
+          # Ensure English language data is present
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip install pytest pytest-asyncio playwright pillow pytesseract
+
+      - name: Install Playwright browsers + deps
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run tests  # 🔧 CHANGED: create artifacts dir + pipe logs so they can be uploaded
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          set -o pipefail
+          pytest -q -s fin-tests/PROD -k test_oneaz_hero_ocr_ci --maxfail=1 --disable-warnings | tee artifacts/pytest.log
+
+      - name: Dump OCR text for baseline & current (optional)  # Produce OCR text files for artifacts
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          BASE="fin-tests/PROD/oneaz/baseline/hero_ad_only_baseline.png"
+          CURR="fin-tests/PROD/screenshots_oneaz_using_pytest/current/hero_ad_only.png"
+          if [ -f "$BASE" ]; then tesseract "$BASE" stdout -l eng --psm 6 --oem 3 > artifacts/ocr_baseline.txt || true; fi
+          if [ -f "$CURR" ]; then tesseract "$CURR" stdout -l eng --psm 6 --oem 3 > artifacts/ocr_current.txt || true; fi
+
+      # Upload artifacts on every run so you still get logs if collection/import fails
+      - name: Upload test artifacts (screenshots + sources + logs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-run-artifacts
+          if-no-files-found: warn
+          path: |
+            **/screenshots_*_using_pytest/**
+            **/*_source.html
+            **/homepage_source.html
+            **/homepage_screenshot.png
+            **/product_page_for_ad_screenshot.png
+            **/hero_ad_only.png
+            artifacts/pytest.log
+            artifacts/ocr_*.txt  

@@ -1,0 +1,54 @@
+name: PROD Daily GOWN Response Time Alarm
+
+on:
+  # Run once a day
+  schedule:
+    - cron: "0 16 * * FRI" #Run every Friday at 8 am PST to reduce cost
+
+  # Allow manual runs from the GitHub Actions UI
+  workflow_dispatch:
+
+jobs:
+  prod-gown-response-time-alarm:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install boto3
+          
+      - name: Debug repo layout and locate script
+        run: |
+          echo "Current directory:"
+          pwd
+          echo
+          echo "Top-level contents:"
+          ls -R .
+          echo
+          echo "Searching for cloudwatch_alarm_for_gown_avg_response_time.py ..."
+          find . -maxdepth 6 -type f -name "cloudwatch_alarm_for_gown_avg_response_time.py" -print || echo "No matches found"
+
+      - name: Run CloudWatch alarm script for GOWN
+        env:
+          # These AWS credentials should be stored as GitHub Actions secrets
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-2
+        run: |
+          # Adjust the path below to where your Python script lives in the repo          
+          python fin-tests/PROD/response_time_alarm_using_cloudwatch/cloudwatch_alarm_for_gown_avg_response_time.py
+
+
+
+
+
+

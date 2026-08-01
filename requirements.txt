@@ -1,0 +1,13 @@
+playwright==1.44.0
+pytest
+pytest-asyncio
+pyotp
+pytest-html
+pytest-rerunfailures
+python-dotenv
+pillow
+opencv-python
+pytesseract
+aiohttp
+colorama
+requests>=2.28

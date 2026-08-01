@@ -1,0 +1,1529 @@
+{
+  "info": {
+    "_postman_id": "61b95da2-4226-421c-b437-135aa449d028",
+    "name": "Municipal",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "33991070",
+    "_collection_link": "https://go.postman.co/collection/33991070-61b95da2-4226-421c-b437-135aa449d028?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Car Loan with RESPONSE TIME THRESHOLD check",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "utils.findFirstAd('hero-round-image', 'Home Hero: Auto Loan', 'class')\r",
+              "utils.algCheck('search', 'car loan')\r",
+              "\r",
+              "// Added responseJSON to fix ReferenceError\r",
+              "const responseJSON = pm.response.json();\r",
+              "\r",
+              "// Set different thresholds based on the environment\r",
+              "let threshold;\r",
+              "if (pm.environment.name === 'STAGE') {\r",
+              "    threshold = 200; // Threshold for staging\r",
+              "} else if (pm.environment.name === 'PROD') {\r",
+              "    threshold = 503; // Threshold for production was 100\r",
+              "    //Anakin 403 ms TOTAL ROUND TRIP 55 MS SERVER SIDE\r",
+              "    //Boba Fett  52 ms (server side)  and   152 ms (total)\r",
+              "} else {\r",
+              "    threshold = 400; // Default threshold for other environment like dev\r",
+              "}\r",
+              "\r",
+              "pm.test(\"Check if the response time 't' key exists to compare with the appropriate threshold\", function () {\r",
+              "    pm.expect(responseJSON).to.have.property('t');\r",
+              "});\r",
+              "\r",
+              "pm.test(\"Check if the response time 't' is within the threshold\", function () {\r",
+              "    pm.expect(responseJSON.t).to.be.below(threshold);\r",
+              "});\r",
+              "\r",
+              "// ADDITIONAL LOGGING OF RESPONSE IN THE CONSOLE LOG\r",
+              "\r",
+              "// Include the script name and the full request URL\r",
+              "const scriptName = pm.info.requestName; // Retrieves the name of the script\r",
+              "const fullUrl = pm.request.url.toString(); // Retrieves the complete URL\r",
+              "const clientName = pm.collectionVariables.get(\"finalyticsClient\");\r",
+              "\r",
+              "console.log(`EXECUTED SCRIPT: ${scriptName} REQUEST URL: ${fullUrl}`);\r",
+              "\r",
+              "//Log the environment on the CONSOLE window\r",
+              "pm.test(\"Verify environment\", function () {\r",
+              "    const env = pm.environment.get(\"api\");\r",
+              "    console.log(\"Running on ENVIRONMENT:\", env, \" for CLIENT: \", clientName);\r",
+              "    console.log(\"SERVER SIDE RESPONSE TIME without latency consideration is :\", responseJSON.t, \"ms\");\r",
+              "    pm.expect(env).to.be.oneOf([\r",
+              "        \"dev\",\r",
+              "        \"stg\",\r",
+              "        \"prod\",\r",
+              "    ]);\r",
+              "});\r",
+              "\r",
+              "// Log the response time displayed in the Postman UI which includes total trip time and network latency\r",
+              "pm.test(\"Log response time displayed in Postman UI\", function () {\r",
+              "    const responseTime = pm.response.responseTime;\r",
+              "    console.log(\"POSTMAN RESPONSE TIME (ms) which is total round trip time for the request:\", responseTime, \"ms\");\r",
+              "\r",
+              "    // Optional: Assert that the response time is below the threshold\r",
+              "    pm.expect(responseTime).to.be.below(threshold);\r",
+              "});\r",
+              "\r",
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "https://www.applefcu.org/",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "https://www.applefcu.org/",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Dest",
+            "value": "empty",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Mode",
+            "value": "cors",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Site",
+            "value": "cross-site",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Not_A Brand\";v=\"99\", \"Google Chrome\";v=\"109\", \"Chromium\";v=\"109\"",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?0",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Windows\"",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"payload\": {\r\n        \"cu_id\": \"60153\",\r\n        \"v\": \"1\",\r\n        \"demographics\": {\r\n            \"zip\": \"94022\",\r\n            \"segments\": {\r\n                \"firsttime\": {\r\n                    \"timestamp\": 1771968853539\r\n                }\r\n            }\r\n        },\r\n        \"zipcode_param\": false,\r\n        \"emulation_date\": \"\",\r\n        \"device\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 644,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-24T21:40:44.849Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"host_env\": \"stg\",\r\n        \"ga_id\": \"1684248120.1771967835\",\r\n        \"ip\": \"172.125.77.226\",\r\n        \"last\": {\r\n            \"device\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"location\": {\r\n                \"zipcode\": \"94022\",\r\n                \"geoname_id\": 5368335,\r\n                \"ip\": \"172.125.77.226\",\r\n                \"city\": \"Los Altos\",\r\n                \"state\": \"CA\",\r\n                \"country\": \"United States\",\r\n                \"metro_code\": 807,\r\n                \"latitude\": 37.3793,\r\n                \"longitude\": -122.12,\r\n                \"isp\": null,\r\n                \"organization\": null,\r\n                \"timezone\": \"America/Los_Angeles\",\r\n                \"state_name\": \"California\",\r\n                \"segments\": {\r\n                    \"94022\": 0.5001,\r\n                    \"firsttime\": 0.9999768886143503,\r\n                    \"-member\": 0.9999999985019274,\r\n                    \"-business\": 0.9999999984971903\r\n                },\r\n                \"browser_data\": {\r\n                    \"device_type\": \"desktop\"\r\n                }\r\n            },\r\n            \"login\": null,\r\n            \"oao\": null,\r\n            \"pageview\": \"https://www.nymcu.org\",\r\n            \"product\": {\r\n                \"category\": \"car loan\",\r\n                \"subcategory\": null,\r\n                \"url_type\": \"product\",\r\n                \"is_categorized\": true,\r\n                \"is_biz\": false,\r\n                \"url\": \"/hs-search-results\",\r\n                \"timestamp\": {{$timestamp}}\r\n            },\r\n            \"products\": {\r\n                \"car loan\": 1771968940328\r\n            },\r\n            \"referrer\": {\r\n                \"url\": \"\",\r\n                \"landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n                \"name\": \"\",\r\n                \"timestamp\": {{$timestamp}},\r\n                \"utm\": {}\r\n            },\r\n            \"search\": {\r\n                \"timestamp\": {{$timestamp}},\r\n                \"term\": \"auto loan\",\r\n                \"url\": \"term=auto+loan\",\r\n                \"category\": \"car loan\"\r\n            },\r\n            \"session\": {\r\n                \"2026-02-24\": {\r\n                    \"start\": 1771968973985,\r\n                    \"end\": 0\r\n                }\r\n            },\r\n            \"page\": {\r\n                \"path\": \"/home-ext\",\r\n                \"timestamp\": 1771968973986\r\n            }\r\n        },\r\n        \"mode\": \"revenue_per_member\",\r\n        \"models\": \"\",\r\n        \"org\": \"\",\r\n        \"page\": \"/home-ext\",\r\n        \"pixel\": \"\",\r\n        \"products_owned\": \"\",\r\n        \"products_recommended\": null,\r\n        \"referrer\": \"\",\r\n        \"suppress\": \"\",\r\n        \"use_distance_model\": \"\",\r\n        \"zipcode\": \"\",\r\n        \"actions\": {},\r\n        \"ads_viewed\": {\r\n            \"3677\": 1\r\n        },\r\n        \"ads_dismissed\": [],\r\n        \"alert_cookies\": {},\r\n        \"devices\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 820,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-24T21:36:13.371Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"id\": \"fcf09d90-b78f-4df5-bf98-02f6f48001f4\",\r\n        \"log\": {},\r\n        \"visits\": {\r\n            \"2026-02-24\": {\r\n                \"start\": 1771968974239,\r\n                \"end\": 1771969242997\r\n            }\r\n        },\r\n        \"session_init\": \"1\",\r\n        \"debug_all\": \"1\",\r\n        \"scoring\": [\r\n            {\r\n                \"car loan\": \"1.00\"\r\n            }\r\n        ],\r\n        \"querystring\": \"?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referrering_landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referrering_landing_page\": \"https://www.nymcu.org/\",\r\n        \"debug_ads\": true,\r\n        \"domain\": \"www.nymcu.org\",\r\n        \"timestamp\": 1771969245951\r\n    },\r\n    \"is_encrypted\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{fullUrl}}",
+          "host": [
+            "{{fullUrl}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Checking Account",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "utils.findFirstAd('hero-round-image', 'Home Hero: Checking Account', 'class')\r",
+              "utils.algCheck('url', 'checking account')"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Dest",
+            "value": "empty",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Mode",
+            "value": "cors",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Site",
+            "value": "cross-site",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Not_A Brand\";v=\"99\", \"Google Chrome\";v=\"109\", \"Chromium\";v=\"109\"",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?0",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Windows\"",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"payload\": {\r\n        \"cu_id\": \"60153\",\r\n        \"v\": \"1\",\r\n        \"demographics\": {\r\n            \"zip\": \"94022\",\r\n            \"segments\": {\r\n                \"firsttime\": {\r\n                    \"timestamp\": 1771949298602\r\n                }\r\n            }\r\n        },\r\n        \"zipcode_param\": false,\r\n        \"emulation_date\": null,\r\n        \"device\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 791,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-24T16:11:08.495Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"host_env\": \"stg\",\r\n        \"ga_id\": \"700559612.1771949299\",\r\n        \"ip\": \"172.125.77.226\",\r\n        \"last\": {\r\n            \"device\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"location\": {\r\n                \"zipcode\": \"94022\",\r\n                \"geoname_id\": 5368335,\r\n                \"ip\": \"172.125.77.226\",\r\n                \"city\": \"Los Altos\",\r\n                \"state\": \"CA\",\r\n                \"country\": \"United States\",\r\n                \"metro_code\": 807,\r\n                \"latitude\": 37.3793,\r\n                \"longitude\": -122.12,\r\n                \"isp\": null,\r\n                \"organization\": null,\r\n                \"timezone\": \"America/Los_Angeles\",\r\n                \"state_name\": \"California\"\r\n            },\r\n            \"login\": null,\r\n            \"oao\": null,\r\n            \"pageview\": \"https://www.nymcu.org\",\r\n            \"product\": {\r\n                \"category\": \"checking account\",\r\n                \"subcategory\": null,\r\n                \"url_type\": \"product\",\r\n                \"is_categorized\": true,\r\n                \"is_biz\": false,\r\n                \"url\": \"/personal-banking/checking\",\r\n                \"timestamp\": {{$timestamp}}\r\n            },\r\n            \"products\": {\r\n                \"checking account\": 1771949392764\r\n            },\r\n            \"referrer\": {\r\n                \"url\": \"\",\r\n                \"landing_page\": \"https://www.nymcu.org/home-ext?debug_all=1&cb=1\",\r\n                \"name\": \"\",\r\n                \"timestamp\": {{$timestamp}},\r\n                \"utm\": {}\r\n            },\r\n            \"session\": {\r\n                \"2026-02-24\": {\r\n                    \"start\": 1771949442273,\r\n                    \"end\": 0\r\n                }\r\n            },\r\n            \"page\": {\r\n                \"path\": \"/home-ext\",\r\n                \"timestamp\": {{$timestamp}}\r\n            }\r\n        },\r\n        \"last_product_url\": \"/personal-banking/checking\",\r\n        \"mode\": \"revenue_per_member\",\r\n        \"models\": \"\",\r\n        \"org\": null,\r\n        \"page\": \"/home-ext\",\r\n        \"pixel\": \"\",\r\n        \"products_owned\": \"\",\r\n        \"products_recommended\": null,\r\n        \"referrer\": \"\",\r\n        \"suppress\": \"\",\r\n        \"use_distance_model\": \"\",\r\n        \"zipcode\": \"94022\",\r\n        \"actions\": {},\r\n        \"ads_dismissed\": [],\r\n        \"id\": \"cce2bc06-41cf-4a27-a45a-eebf0e61783d\",\r\n        \"visits\": {\r\n            \"2026-02-24\": {\r\n                \"start\": 1771949442895,\r\n                \"end\": 1771949466493\r\n            }\r\n        },\r\n        \"debug_all\": \"1\",\r\n        \"scoring\": [\r\n            {\r\n                \"checking account\": \"1.00\"\r\n            }\r\n        ],\r\n        \"querystring\": \"?debug_all=1&cb=1\",\r\n        \"debug_ads\": true,\r\n        \"session_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referrering_landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referrering_landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"domain\": \"www.nymcu.org\"\r\n    },\r\n    \"is_encrypted\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{fullUrl}}",
+          "host": [
+            "{{fullUrl}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Mortgages",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "utils.findFirstAd('hero-round-image', 'Home Hero: Mortgage', 'class')\r",
+              "utils.algCheck('url', 'mortgage')"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Dest",
+            "value": "empty",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Mode",
+            "value": "cors",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Site",
+            "value": "cross-site",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Not_A Brand\";v=\"99\", \"Google Chrome\";v=\"109\", \"Chromium\";v=\"109\"",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?0",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Windows\"",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"payload\": {\r\n        \"cu_id\": \"60153\",\r\n        \"v\": \"1\",\r\n        \"demographics\": {\r\n            \"zip\": \"94022\",\r\n            \"segments\": {\r\n                \"firsttime\": {\r\n                    \"timestamp\": 1771978290740\r\n                }\r\n            }\r\n        },\r\n        \"zipcode_param\": false,\r\n        \"emulation_date\": \"\",\r\n        \"device\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 779,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-25T00:17:26.680Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"host_env\": \"stg\",\r\n        \"ga_id\": \"1684248120.1771967835\",\r\n        \"ip\": \"172.125.77.226\",\r\n        \"last\": {\r\n            \"device\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"location\": {\r\n                \"zipcode\": \"94022\",\r\n                \"geoname_id\": 5368335,\r\n                \"ip\": \"172.125.77.226\",\r\n                \"city\": \"Los Altos\",\r\n                \"state\": \"CA\",\r\n                \"country\": \"United States\",\r\n                \"metro_code\": 807,\r\n                \"latitude\": 37.3793,\r\n                \"longitude\": -122.12,\r\n                \"isp\": null,\r\n                \"organization\": null,\r\n                \"timezone\": \"America/Los_Angeles\",\r\n                \"state_name\": \"California\",\r\n                \"segments\": {\r\n                    \"94022\": 0.5001,\r\n                    \"firsttime\": 0.9999847690462146,\r\n                    \"-member\": 0.9999999983451893,\r\n                    \"-business\": 0.9999999983406361\r\n                },\r\n                \"browser_data\": {\r\n                    \"device_type\": \"desktop\"\r\n                }\r\n            },\r\n            \"login\": null,\r\n            \"oao\": null,\r\n            \"pageview\": \"https://www.nymcu.org/home-ext\",\r\n            \"product\": {\r\n                \"category\": \"mortgage\",\r\n                \"subcategory\": null,\r\n                \"url_type\": \"product\",\r\n                \"is_categorized\": true,\r\n                \"is_biz\": false,\r\n                \"url\": \"/lending/residential-lending/mortgage-center\",\r\n                \"timestamp\": {{$timestamp}}\r\n            },\r\n            \"products\": {\r\n                \"mortgage\": 1771978346513\r\n            },\r\n            \"referrer\": {\r\n                \"url\": \"\",\r\n                \"landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n                \"name\": \"\",\r\n                \"timestamp\": {{$timestamp}},\r\n                \"utm\": {}\r\n            },\r\n            \"search\": {},\r\n            \"session\": {\r\n                \"2026-02-24\": {\r\n                    \"start\": 1771978370734,\r\n                    \"end\": 0\r\n                }\r\n            },\r\n            \"page\": {\r\n                \"path\": \"/home-ext\",\r\n                \"timestamp\": {{$timestamp}}\r\n            }\r\n        },\r\n        \"mode\": \"revenue_per_member\",\r\n        \"models\": \"\",\r\n        \"org\": \"\",\r\n        \"page\": \"/home-ext\",\r\n        \"pixel\": \"\",\r\n        \"products_owned\": \"\",\r\n        \"products_recommended\": null,\r\n        \"referrer\": \"\",\r\n        \"suppress\": \"\",\r\n        \"use_distance_model\": \"\",\r\n        \"zipcode\": \"\",\r\n        \"actions\": {},\r\n        \"ads_viewed\": {\r\n            \"3679\": 1\r\n        },\r\n        \"ads_dismissed\": [],\r\n        \"alert_cookies\": {},\r\n        \"devices\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 637,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-25T00:12:49.889Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"id\": \"a549360e-ccb5-46b6-a03f-f4cf38b63c4a\",\r\n        \"log\": {},\r\n        \"visits\": {\r\n            \"2026-02-24\": {\r\n                \"start\": 1771978370880,\r\n                \"end\": 1771978643690\r\n            }\r\n        },\r\n        \"session_init\": \"1\",\r\n        \"debug_all\": \"1\",\r\n        \"scoring\": [\r\n            {\r\n                \"mortgage\": \"2.00\"\r\n            }\r\n        ],\r\n        \"querystring\": \"?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referrering_landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referrering_landing_page\": \"https://www.nymcu.org/\",\r\n        \"debug_ads\": true,\r\n        \"domain\": \"www.nymcu.org\",\r\n        \"timestamp\": {{$timestamp}}\r\n    },\r\n    \"is_encrypted\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{fullUrl}}",
+          "host": [
+            "{{fullUrl}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Savings Account",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "utils.findFirstAd('hero-round-image', 'Home Hero: Savings Account', 'class')\r",
+              "utils.algCheck('url', 'savings account')"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Dest",
+            "value": "empty",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Mode",
+            "value": "cors",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Site",
+            "value": "cross-site",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Not_A Brand\";v=\"99\", \"Google Chrome\";v=\"109\", \"Chromium\";v=\"109\"",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?0",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Windows\"",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"payload\": {\r\n        \"cu_id\": \"60153\",\r\n        \"v\": \"1\",\r\n        \"demographics\": {\r\n            \"zip\": \"94022\",\r\n            \"segments\": {\r\n                \"firsttime\": {\r\n                    \"timestamp\": 1771965650831\r\n                }\r\n            },\r\n            \"applications\": {\r\n                \"started\": {\r\n                    \"savings account\": [\r\n                        1771966123143\r\n                    ]\r\n                }\r\n            }\r\n        },\r\n        \"zipcode_param\": false,\r\n        \"emulation_date\": null,\r\n        \"device\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 751,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-24T20:49:48.823Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"host_env\": \"stg\",\r\n        \"ga_id\": \"329735395.1771960030\",\r\n        \"ip\": \"172.125.77.226\",\r\n        \"last\": {\r\n            \"device\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"location\": {\r\n                \"zipcode\": \"94022\",\r\n                \"geoname_id\": 5368335,\r\n                \"ip\": \"172.125.77.226\",\r\n                \"city\": \"Los Altos\",\r\n                \"state\": \"CA\",\r\n                \"country\": \"United States\",\r\n                \"metro_code\": 807,\r\n                \"latitude\": 37.3793,\r\n                \"longitude\": -122.12,\r\n                \"isp\": null,\r\n                \"organization\": null,\r\n                \"timezone\": \"America/Los_Angeles\",\r\n                \"state_name\": \"California\"\r\n            },\r\n            \"login\": null,\r\n            \"oao\": null,\r\n            \"pageview\": \"https://www.nymcu.org\",\r\n            \"product\": {\r\n                \"category\": \"savings account\",\r\n                \"subcategory\": null,\r\n                \"url_type\": \"product\",\r\n                \"is_categorized\": true,\r\n                \"is_biz\": false,\r\n                \"url\": \"/personal-banking/savings\",\r\n                \"timestamp\": {{$timestamp}}\r\n            },\r\n            \"products\": {\r\n                \"savings account\": 1771966143490\r\n            },\r\n            \"referrer\": {\r\n                \"url\": \"\",\r\n                \"landing_page\": \"https://www.nymcu.org/home-ext?debug_all=1&cb=1\",\r\n                \"name\": \"\",\r\n                \"timestamp\": {{$timestamp}},\r\n                \"utm\": {}\r\n            },\r\n            \"session\": {\r\n                \"2026-02-24\": {\r\n                    \"start\": 1771966142948,\r\n                    \"end\": 0\r\n                }\r\n            },\r\n            \"page\": {\r\n                \"path\": \"/personal-banking/savings\",\r\n                \"timestamp\": {{$timestamp}}\r\n            }\r\n        },\r\n        \"last_product_url\": \"/personal-banking/savings\",\r\n        \"mode\": \"revenue_per_member\",\r\n        \"models\": \"\",\r\n        \"org\": null,\r\n        \"page\": \"/home-ext\",\r\n        \"pixel\": \"\",\r\n        \"products_owned\": \"\",\r\n        \"products_recommended\": null,\r\n        \"referrer\": \"\",\r\n        \"suppress\": \"\",\r\n        \"use_distance_model\": \"\",\r\n        \"zipcode\": \"94022\",\r\n        \"actions\": {},\r\n        \"ads_dismissed\": [],\r\n        \"id\": \"075454cf-0898-4cd3-b53c-138fe521a2d4\",\r\n        \"visits\": {\r\n            \"2026-02-24\": {\r\n                \"start\": 1771966143504,\r\n                \"end\": 1771966186962\r\n            }\r\n        },\r\n        \"debug_all\": \"1\",\r\n        \"scoring\": [\r\n            {\r\n                \"savings account\": \"2.00\"\r\n            }\r\n        ],\r\n        \"querystring\": \"?debug_all=1&cb=1\",\r\n        \"debug_ads\": true,\r\n        \"session_referring_url\": \"https://www.nymcu.org/personal-banking/checking\",\r\n        \"original_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referrering_landing_page\": \"https://www.nymcu.org/\",\r\n        \"original_referrering_landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"domain\": \"www.nymcu.org\"\r\n    },\r\n    \"is_encrypted\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{fullUrl}}",
+          "host": [
+            "{{fullUrl}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "CD",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "utils.findFirstAd('hero-round-image', 'Home Hero: Certificate', 'class')\r",
+              "utils.algCheck('url', 'cd')"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Dest",
+            "value": "empty",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Mode",
+            "value": "cors",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Site",
+            "value": "cross-site",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Not_A Brand\";v=\"99\", \"Google Chrome\";v=\"109\", \"Chromium\";v=\"109\"",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?0",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Windows\"",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"payload\": {\r\n        \"cu_id\": \"60153\",\r\n        \"v\": \"1\",\r\n        \"demographics\": {\r\n            \"zip\": \"94022\",\r\n            \"segments\": {\r\n                \"firsttime\": {\r\n                    \"timestamp\": 1771966325583\r\n                }\r\n            },\r\n            \"applications\": {\r\n                \"started\": {\r\n                    \"cd\": [\r\n                        1771966672286\r\n                    ]\r\n                }\r\n            }\r\n        },\r\n        \"zipcode_param\": false,\r\n        \"emulation_date\": \"\",\r\n        \"device\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 759,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-24T21:02:13.806Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"host_env\": \"stg\",\r\n        \"ga_id\": \"329735395.1771960030\",\r\n        \"ip\": \"172.125.77.226\",\r\n        \"last\": {\r\n            \"device\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"location\": {\r\n                \"zipcode\": \"94022\",\r\n                \"geoname_id\": 5368335,\r\n                \"ip\": \"172.125.77.226\",\r\n                \"city\": \"Los Altos\",\r\n                \"state\": \"CA\",\r\n                \"country\": \"United States\",\r\n                \"metro_code\": 807,\r\n                \"latitude\": 37.3793,\r\n                \"longitude\": -122.12,\r\n                \"isp\": null,\r\n                \"organization\": null,\r\n                \"timezone\": \"America/Los_Angeles\",\r\n                \"state_name\": \"California\",\r\n                \"segments\": {\r\n                    \"94022\": 0.5001,\r\n                    \"firsttime\": 0.999929669490337,\r\n                    \"-member\": 0.9999999986566419,\r\n                    \"-business\": 0.9999999986492834\r\n                },\r\n                \"browser_data\": {\r\n                    \"device_type\": \"desktop\"\r\n                }\r\n            },\r\n            \"login\": null,\r\n            \"oao\": null,\r\n            \"pageview\": \"https://www.nymcu.org\",\r\n            \"product\": {\r\n                \"category\": \"cd\",\r\n                \"subcategory\": null,\r\n                \"url_type\": \"product\",\r\n                \"is_categorized\": true,\r\n                \"is_biz\": false,\r\n                \"url\": \"/personal-banking/savings/share-certificate-accounts\",\r\n                \"timestamp\": {{$timestamp}}\r\n            },\r\n            \"products\": {\r\n                \"cd\": 1771966375894\r\n            },\r\n            \"referrer\": {\r\n                \"url\": \"\",\r\n                \"landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n                \"name\": \"\",\r\n                \"timestamp\": {{$timestamp}},\r\n                \"utm\": {}\r\n            },\r\n            \"search\": {},\r\n            \"session\": {\r\n                \"2026-02-24\": {\r\n                    \"start\": 1771966690666,\r\n                    \"end\": 0\r\n                }\r\n            },\r\n            \"page\": {\r\n                \"path\": \"/home-ext\",\r\n                \"timestamp\": {{$timestamp}}\r\n            }\r\n        },\r\n        \"mode\": \"revenue_per_member\",\r\n        \"models\": \"\",\r\n        \"org\": \"\",\r\n        \"page\": \"/home-ext\",\r\n        \"pixel\": \"\",\r\n        \"products_owned\": \"\",\r\n        \"products_recommended\": null,\r\n        \"referrer\": \"\",\r\n        \"suppress\": \"\",\r\n        \"use_distance_model\": \"\",\r\n        \"zipcode\": \"\",\r\n        \"actions\": {},\r\n        \"ads_viewed\": {\r\n            \"3673\": 2\r\n        },\r\n        \"ads_dismissed\": [],\r\n        \"alert_cookies\": {},\r\n        \"devices\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 1112,\r\n            \"height\": 759,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-24T20:58:09.863Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"id\": \"4ba89b6c-3b3c-4589-9129-cd83235823eb\",\r\n        \"log\": {},\r\n        \"visits\": {\r\n            \"2026-02-24\": {\r\n                \"start\": 1771966690839,\r\n                \"end\": 1771966931860\r\n            }\r\n        },\r\n        \"session_init\": \"1\",\r\n        \"debug_all\": \"1\",\r\n        \"scoring\": [\r\n            {\r\n                \"cd\": \"1.00\"\r\n            }\r\n        ],\r\n        \"querystring\": \"?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referrering_landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referring_url\": \"https://www.nymcu.org/home-ext?debug_all=1&cb=1\",\r\n        \"session_referrering_landing_page\": \"https://www.nymcu.org/\",\r\n        \"debug_ads\": true,\r\n        \"domain\": \"www.nymcu.org\",\r\n        \"timestamp\": 1771966934551\r\n    },\r\n    \"is_encrypted\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{fullUrl}}",
+          "host": [
+            "{{fullUrl}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Money Market Account",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "utils.findFirstAd('hero-round-image', 'Home Hero: Money Market Account', 'class')\r",
+              "utils.algCheck('search', 'money market account')"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Dest",
+            "value": "empty",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Mode",
+            "value": "cors",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Site",
+            "value": "cross-site",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Not_A Brand\";v=\"99\", \"Google Chrome\";v=\"109\", \"Chromium\";v=\"109\"",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?0",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Windows\"",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"payload\": {\r\n        \"cu_id\": \"60153\",\r\n        \"v\": \"1\",\r\n        \"demographics\": {\r\n            \"zip\": \"94022\",\r\n            \"segments\": {\r\n                \"firsttime\": {\r\n                    \"timestamp\": 1772044507276\r\n                }\r\n            },\r\n            \"applications\": {\r\n                \"started\": {\r\n                    \"cd\": [\r\n                        1772044641683\r\n                    ]\r\n                }\r\n            }\r\n        },\r\n        \"zipcode_param\": false,\r\n        \"emulation_date\": null,\r\n        \"device\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 1169,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-25T18:42:08.305Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"host_env\": \"prod\",\r\n        \"ga_id\": \"1329263735.1772042420\",\r\n        \"ip\": \"172.125.77.226\",\r\n        \"last\": {\r\n            \"device\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"location\": {\r\n                \"zipcode\": \"94022\",\r\n                \"geoname_id\": 5368335,\r\n                \"ip\": \"172.125.77.226\",\r\n                \"city\": \"Los Altos\",\r\n                \"state\": \"CA\",\r\n                \"country\": \"United States\",\r\n                \"metro_code\": 807,\r\n                \"latitude\": 37.3793,\r\n                \"longitude\": -122.12,\r\n                \"isp\": null,\r\n                \"organization\": null,\r\n                \"timezone\": \"America/Los_Angeles\",\r\n                \"state_name\": \"California\",\r\n                \"segments\": {\r\n                    \"94022\": 0.5001,\r\n                    \"firsttime\": 0.9999294217669945,\r\n                    \"-member\": 0.9999999982880682,\r\n                    \"-business\": 0.9999999982796517\r\n                },\r\n                \"browser_data\": {\r\n                    \"device_type\": \"desktop\"\r\n                }\r\n            },\r\n            \"login\": null,\r\n            \"oao\": null,\r\n            \"pageview\": \"https://www.nymcu.org\",\r\n            \"product\": {\r\n                \"category\": \"money market account\",\r\n                \"subcategory\": null,\r\n                \"url_type\": \"product\",\r\n                \"is_categorized\": true,\r\n                \"is_biz\": false,\r\n                \"url\": \"/hs-search-results\",\r\n                \"timestamp\": {{$timestamp}}\r\n            },\r\n            \"products\": {\r\n                \"cd\": 1772044542021,\r\n                \"money market account\": 1772044876950\r\n            },\r\n            \"referrer\": {\r\n                \"url\": \"\",\r\n                \"landing_page\": \"https://www.nymcu.org/\",\r\n                \"name\": \"\",\r\n                \"timestamp\": {{$timestamp}},\r\n                \"utm\": {}\r\n            },\r\n            \"search\": {\r\n                \"timestamp\": {{$timestamp}},\r\n                \"term\": \"money market account\",\r\n                \"url\": \"term=money+market+account\",\r\n                \"category\": \"money market account\"\r\n            },\r\n            \"session\": {\r\n                \"2026-02-25\": {\r\n                    \"start\": 1772044876697,\r\n                    \"end\": 0\r\n                }\r\n            },\r\n            \"page\": {\r\n                \"path\": \"/hs-search-results\",\r\n                \"timestamp\": {{$timestamp}}\r\n            }\r\n        },\r\n        \"last_product_url\": \"/hs-search-results\",\r\n        \"mode\": \"revenue_per_member\",\r\n        \"models\": \"\",\r\n        \"org\": null,\r\n        \"page\": \"/\",\r\n        \"pixel\": \"\",\r\n        \"products_owned\": \"\",\r\n        \"products_recommended\": null,\r\n        \"referrer\": \"https://www.nymcu.org/hs-search-results?term=money+market+account\",\r\n        \"suppress\": \"\",\r\n        \"use_distance_model\": \"\",\r\n        \"zipcode\": \"94022\",\r\n        \"actions\": {},\r\n        \"ads_dismissed\": [],\r\n        \"id\": \"4baa87d2-27bc-4a1f-ba59-bb9d522f2492\",\r\n        \"visits\": {\r\n            \"2026-02-25\": {\r\n                \"start\": 1772044876955,\r\n                \"end\": 1772044926209\r\n            }\r\n        },\r\n        \"page_data\": {\r\n            \"attributes\": null,\r\n            \"category\": null,\r\n            \"audience\": null,\r\n            \"is_biz\": false,\r\n            \"url_type\": \"home\",\r\n            \"is_reviewed\": true\r\n        },\r\n        \"scoring\": [\r\n            {\r\n                \"cd\": \"1.00\"\r\n            },\r\n            {\r\n                \"money market account\": \"1.00\"\r\n            }\r\n        ],\r\n        \"querystring\": \"\",\r\n        \"debug_ads\": true,\r\n        \"session_referring_url\": \"https://www.nymcu.org/\",\r\n        \"original_referring_url\": \"https://www.nymcu.org/?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referrering_landing_page\": \"https://www.nymcu.org/\",\r\n        \"original_referrering_landing_page\": \"https://www.nymcu.org/?session_init=1&debug_all=1&cb=1\",\r\n        \"domain\": \"www.nymcu.org\"\r\n    },\r\n    \"is_encrypted\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{fullUrl}}",
+          "host": [
+            "{{fullUrl}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "IRA",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "utils.findFirstAd('hero-round-image', 'Home Hero: IRA', 'class')\r",
+              "utils.algCheck('url', 'ira')"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Dest",
+            "value": "empty",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Mode",
+            "value": "cors",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Site",
+            "value": "cross-site",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Not_A Brand\";v=\"99\", \"Google Chrome\";v=\"109\", \"Chromium\";v=\"109\"",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?0",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Windows\"",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"payload\": {\r\n        \"cu_id\": \"60153\",\r\n        \"v\": \"1\",\r\n        \"demographics\": {\r\n            \"zip\": \"94022\",\r\n            \"segments\": {\r\n                \"firsttime\": {\r\n                    \"timestamp\": 1772045334197\r\n                }\r\n            }\r\n        },\r\n        \"zipcode_param\": false,\r\n        \"emulation_date\": null,\r\n        \"device\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 674,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-25T19:04:09.703Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"host_env\": \"prod\",\r\n        \"ga_id\": \"1329263735.1772042420\",\r\n        \"ip\": \"172.125.77.226\",\r\n        \"last\": {\r\n            \"device\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"location\": {\r\n                \"zipcode\": \"94022\",\r\n                \"geoname_id\": 5368335,\r\n                \"ip\": \"172.125.77.226\",\r\n                \"city\": \"Los Altos\",\r\n                \"state\": \"CA\",\r\n                \"country\": \"United States\",\r\n                \"metro_code\": 807,\r\n                \"latitude\": 37.3793,\r\n                \"longitude\": -122.12,\r\n                \"isp\": null,\r\n                \"organization\": null,\r\n                \"timezone\": \"America/Los_Angeles\",\r\n                \"state_name\": \"California\",\r\n                \"segments\": {\r\n                    \"94022\": 0.5001,\r\n                    \"firsttime\": 0.9998284054200774,\r\n                    \"-member\": 0.9999999983124435,\r\n                    \"-business\": 0.9999999983075685\r\n                },\r\n                \"browser_data\": {\r\n                    \"device_type\": \"desktop\"\r\n                }\r\n            },\r\n            \"login\": null,\r\n            \"oao\": null,\r\n            \"pageview\": \"https://www.nymcu.org\",\r\n            \"product\": {\r\n                \"category\": \"ira\",\r\n                \"subcategory\": null,\r\n                \"url_type\": \"product\",\r\n                \"is_categorized\": true,\r\n                \"is_biz\": false,\r\n                \"url\": \"/personal-banking/iras/flexible-rate\",\r\n                \"timestamp\": 1772046227551\r\n            },\r\n            \"products\": {\r\n                \"ira\": 1772046227551\r\n            },\r\n            \"referrer\": {\r\n                \"url\": \"\",\r\n                \"landing_page\": \"https://www.nymcu.org/\",\r\n                \"name\": \"\",\r\n                \"timestamp\": 1772046249928,\r\n                \"utm\": {}\r\n            },\r\n            \"session\": {\r\n                \"2026-02-25\": {\r\n                    \"start\": 1772046227147,\r\n                    \"end\": 0\r\n                }\r\n            },\r\n            \"page\": {\r\n                \"path\": \"/personal-banking/iras/flexible-rate\",\r\n                \"timestamp\": 1772046227554\r\n            }\r\n        },\r\n        \"last_product_url\": \"/personal-banking/iras/flexible-rate\",\r\n        \"mode\": \"revenue_per_member\",\r\n        \"models\": \"\",\r\n        \"org\": null,\r\n        \"page\": \"/\",\r\n        \"pixel\": \"\",\r\n        \"products_owned\": \"\",\r\n        \"products_recommended\": null,\r\n        \"referrer\": \"https://www.nymcu.org/personal-banking/iras/flexible-rate\",\r\n        \"suppress\": \"\",\r\n        \"use_distance_model\": \"\",\r\n        \"zipcode\": \"94022\",\r\n        \"actions\": {},\r\n        \"ads_dismissed\": [],\r\n        \"id\": \"f45a775b-4508-4048-87e0-653009ba98be\",\r\n        \"visits\": {\r\n            \"2026-02-25\": {\r\n                \"start\": 1772046227553,\r\n                \"end\": 1772046247528\r\n            }\r\n        },\r\n        \"page_data\": {\r\n            \"attributes\": null,\r\n            \"category\": null,\r\n            \"audience\": null,\r\n            \"is_biz\": false,\r\n            \"url_type\": \"home\",\r\n            \"is_reviewed\": true\r\n        },\r\n        \"scoring\": [\r\n            {\r\n                \"ira\": \"1.00\"\r\n            }\r\n        ],\r\n        \"querystring\": \"\",\r\n        \"debug_ads\": true,\r\n        \"session_referring_url\": \"https://www.nymcu.org/\",\r\n        \"original_referring_url\": \"https://www.nymcu.org/?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referrering_landing_page\": \"https://www.nymcu.org/\",\r\n        \"original_referrering_landing_page\": \"https://www.nymcu.org/?session_init=1&debug_all=1&cb=1\",\r\n        \"domain\": \"www.nymcu.org\"\r\n    },\r\n    \"is_encrypted\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{fullUrl}}",
+          "host": [
+            "{{fullUrl}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Personal Loan",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "utils.findFirstAd('hero-round-image', 'Home Hero: Personal Loan', 'class')\r",
+              "utils.algCheck('url', 'personal loan')"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Dest",
+            "value": "empty",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Mode",
+            "value": "cors",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Site",
+            "value": "cross-site",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Not_A Brand\";v=\"99\", \"Google Chrome\";v=\"109\", \"Chromium\";v=\"109\"",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?0",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Windows\"",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"payload\": {\r\n        \"cu_id\": \"60153\",\r\n        \"v\": \"1\",\r\n        \"demographics\": {\r\n            \"zip\": \"94022\",\r\n            \"segments\": {\r\n                \"firsttime\": {\r\n                    \"timestamp\": 1771967832286\r\n                }\r\n            }\r\n        },\r\n        \"zipcode_param\": false,\r\n        \"emulation_date\": null,\r\n        \"device\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 759,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-24T21:24:28.000Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"host_env\": \"prod\",\r\n        \"ga_id\": \"1684248120.1771967835\",\r\n        \"ip\": \"172.125.77.226\",\r\n        \"last\": {\r\n            \"device\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"location\": {\r\n                \"zipcode\": \"94022\",\r\n                \"geoname_id\": 5368335,\r\n                \"ip\": \"172.125.77.226\",\r\n                \"city\": \"Los Altos\",\r\n                \"state\": \"CA\",\r\n                \"country\": \"United States\",\r\n                \"metro_code\": 807,\r\n                \"latitude\": 37.3793,\r\n                \"longitude\": -122.12,\r\n                \"isp\": null,\r\n                \"organization\": null,\r\n                \"timezone\": \"America/Los_Angeles\",\r\n                \"state_name\": \"California\",\r\n                \"segments\": {\r\n                    \"94022\": 0.5001,\r\n                    \"firsttime\": 0.9999621002678701,\r\n                    \"-member\": 0.9999999983189742,\r\n                    \"-business\": 0.9999999983140991\r\n                },\r\n                \"browser_data\": {\r\n                    \"device_type\": \"desktop\"\r\n                }\r\n            },\r\n            \"login\": null,\r\n            \"oao\": null,\r\n            \"pageview\": \"https://www.nymcu.org\",\r\n            \"product\": {\r\n                \"category\": \"ira\",\r\n                \"subcategory\": null,\r\n                \"url_type\": \"product\",\r\n                \"is_categorized\": true,\r\n                \"is_biz\": false,\r\n                \"url\": \"/personal-banking/iras/flexible-rate\",\r\n                \"timestamp\": {{$timestamp}}\r\n            },\r\n            \"products\": {\r\n                \"ira\": 1771967962414\r\n            },\r\n            \"referrer\": {\r\n                \"url\": \"\",\r\n                \"landing_page\": \"https://www.nymcu.org/join/becoming-a-member\",\r\n                \"name\": \"\",\r\n                \"timestamp\": {{$timestamp}},\r\n                \"utm\": {}\r\n            },\r\n            \"search\": {\r\n                \"timestamp\": {{$timestamp}},\r\n                \"term\": \"IRA\",\r\n                \"url\": \"term=IRA\",\r\n                \"category\": \"ira\"\r\n            },\r\n            \"session\": {\r\n                \"2026-02-24\": {\r\n                    \"start\": 1771968029361,\r\n                    \"end\": 0\r\n                }\r\n            },\r\n            \"page\": {\r\n                \"path\": \"/home-ext\",\r\n                \"timestamp\": {{$timestamp}}\r\n            }\r\n        },\r\n        \"last_product_url\": \"/personal-banking/iras/flexible-rate\",\r\n        \"mode\": \"revenue_per_member\",\r\n        \"models\": \"\",\r\n        \"org\": null,\r\n        \"page\": \"/join/becoming-a-member\",\r\n        \"pixel\": \"\",\r\n        \"products_owned\": \"\",\r\n        \"products_recommended\": null,\r\n        \"referrer\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"suppress\": \"\",\r\n        \"use_distance_model\": \"\",\r\n        \"zipcode\": \"94022\",\r\n        \"actions\": {},\r\n        \"ads_dismissed\": [],\r\n        \"id\": \"fcc3b387-a1a4-4712-ae04-67615764bcac\",\r\n        \"visits\": {\r\n            \"2026-02-24\": {\r\n                \"start\": 1771968029468,\r\n                \"end\": 1771968266053\r\n            }\r\n        },\r\n        \"scoring\": [\r\n            {\r\n                \"ira\": \"3.00\"\r\n            }\r\n        ],\r\n        \"querystring\": \"\",\r\n        \"debug_ads\": true,\r\n        \"session_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referrering_landing_page\": \"https://www.nymcu.org/hs-search-results?term=IRA\",\r\n        \"original_referrering_landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"domain\": \"www.nymcu.org\"\r\n    },\r\n    \"is_encrypted\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{fullUrl}}",
+          "host": [
+            "{{fullUrl}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Credit Card",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "utils.findFirstAd('hero-round-image', 'Home Hero: Credit Card', 'class')\r",
+              "utils.algCheck('url', 'credit card')"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Dest",
+            "value": "empty",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Mode",
+            "value": "cors",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Site",
+            "value": "cross-site",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Not_A Brand\";v=\"99\", \"Google Chrome\";v=\"109\", \"Chromium\";v=\"109\"",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?0",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Windows\"",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"payload\": {\r\n        \"cu_id\": \"60153\",\r\n        \"v\": \"1\",\r\n        \"demographics\": {\r\n            \"zip\": \"94022\",\r\n            \"segments\": {\r\n                \"firsttime\": {\r\n                    \"timestamp\": 1771968440025\r\n                }\r\n            }\r\n        },\r\n        \"zipcode_param\": false,\r\n        \"emulation_date\": \"\",\r\n        \"device\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 640,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-24T21:32:20.451Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"host_env\": \"stg\",\r\n        \"ga_id\": \"1684248120.1771967835\",\r\n        \"ip\": \"172.125.77.226\",\r\n        \"last\": {\r\n            \"device\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"location\": {\r\n                \"zipcode\": \"94022\",\r\n                \"geoname_id\": 5368335,\r\n                \"ip\": \"172.125.77.226\",\r\n                \"city\": \"Los Altos\",\r\n                \"state\": \"CA\",\r\n                \"country\": \"United States\",\r\n                \"metro_code\": 807,\r\n                \"latitude\": 37.3793,\r\n                \"longitude\": -122.12,\r\n                \"isp\": null,\r\n                \"organization\": null,\r\n                \"timezone\": \"America/Los_Angeles\",\r\n                \"state_name\": \"California\",\r\n                \"segments\": {\r\n                    \"94022\": 0.5001,\r\n                    \"firsttime\": 0.9999845788712487,\r\n                    \"-member\": 0.9999999988194049,\r\n                    \"-business\": 0.9999999988144839\r\n                },\r\n                \"browser_data\": {\r\n                    \"device_type\": \"desktop\"\r\n                }\r\n            },\r\n            \"login\": null,\r\n            \"oao\": null,\r\n            \"pageview\": \"https://www.nymcu.org\",\r\n            \"product\": {\r\n                \"category\": \"credit card\",\r\n                \"subcategory\": null,\r\n                \"url_type\": \"product\",\r\n                \"is_categorized\": true,\r\n                \"is_biz\": false,\r\n                \"url\": \"/personal-banking/credit-cards\",\r\n                \"timestamp\": {{$timestamp}}\r\n            },\r\n            \"products\": {\r\n                \"credit card\": 1771968472654\r\n            },\r\n            \"referrer\": {\r\n                \"url\": \"\",\r\n                \"landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n                \"name\": \"\",\r\n                \"timestamp\": {{$timestamp}},\r\n                \"utm\": {}\r\n            },\r\n            \"search\": {},\r\n            \"session\": {\r\n                \"2026-02-24\": {\r\n                    \"start\": 1771968520606,\r\n                    \"end\": 0\r\n                }\r\n            },\r\n            \"page\": {\r\n                \"path\": \"/home-ext\",\r\n                \"timestamp\": {{$timestamp}}\r\n            }\r\n        },\r\n        \"mode\": \"revenue_per_member\",\r\n        \"models\": \"\",\r\n        \"org\": \"\",\r\n        \"page\": \"/home-ext\",\r\n        \"pixel\": \"\",\r\n        \"products_owned\": \"\",\r\n        \"products_recommended\": null,\r\n        \"referrer\": \"\",\r\n        \"suppress\": \"\",\r\n        \"use_distance_model\": \"\",\r\n        \"zipcode\": \"\",\r\n        \"actions\": {},\r\n        \"ads_viewed\": {\r\n            \"3676\": 1\r\n        },\r\n        \"ads_dismissed\": [],\r\n        \"alert_cookies\": {},\r\n        \"devices\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 759,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-24T21:28:39.986Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"id\": \"dac9dc40-8a5c-43af-867b-00c005b0aacb\",\r\n        \"log\": {},\r\n        \"visits\": {\r\n            \"2026-02-24\": {\r\n                \"start\": 1771968520788,\r\n                \"end\": 1771968738766\r\n            }\r\n        },\r\n        \"session_init\": \"1\",\r\n        \"debug_all\": \"1\",\r\n        \"scoring\": [\r\n            {\r\n                \"credit card\": \"1.00\"\r\n            }\r\n        ],\r\n        \"querystring\": \"?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referrering_landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referrering_landing_page\": \"https://www.nymcu.org/\",\r\n        \"debug_ads\": true,\r\n        \"domain\": \"www.nymcu.org\",\r\n        \"timestamp\": {{$timestamp}}\r\n    },\r\n    \"is_encrypted\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{fullUrl}}",
+          "host": [
+            "{{fullUrl}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Car Loan",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "utils.findFirstAd('hero-round-image', 'Home Hero: Auto Loan', 'class')\r",
+              "utils.algCheck('search', 'car loan')"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Dest",
+            "value": "empty",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Mode",
+            "value": "cors",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Site",
+            "value": "cross-site",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Not_A Brand\";v=\"99\", \"Google Chrome\";v=\"109\", \"Chromium\";v=\"109\"",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?0",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Windows\"",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"payload\": {\r\n        \"cu_id\": \"60153\",\r\n        \"v\": \"1\",\r\n        \"demographics\": {\r\n            \"zip\": \"94022\",\r\n            \"segments\": {\r\n                \"firsttime\": {\r\n                    \"timestamp\": 1771968853539\r\n                }\r\n            }\r\n        },\r\n        \"zipcode_param\": false,\r\n        \"emulation_date\": \"\",\r\n        \"device\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 644,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-24T21:40:44.849Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"host_env\": \"stg\",\r\n        \"ga_id\": \"1684248120.1771967835\",\r\n        \"ip\": \"172.125.77.226\",\r\n        \"last\": {\r\n            \"device\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"location\": {\r\n                \"zipcode\": \"94022\",\r\n                \"geoname_id\": 5368335,\r\n                \"ip\": \"172.125.77.226\",\r\n                \"city\": \"Los Altos\",\r\n                \"state\": \"CA\",\r\n                \"country\": \"United States\",\r\n                \"metro_code\": 807,\r\n                \"latitude\": 37.3793,\r\n                \"longitude\": -122.12,\r\n                \"isp\": null,\r\n                \"organization\": null,\r\n                \"timezone\": \"America/Los_Angeles\",\r\n                \"state_name\": \"California\",\r\n                \"segments\": {\r\n                    \"94022\": 0.5001,\r\n                    \"firsttime\": 0.9999768886143503,\r\n                    \"-member\": 0.9999999985019274,\r\n                    \"-business\": 0.9999999984971903\r\n                },\r\n                \"browser_data\": {\r\n                    \"device_type\": \"desktop\"\r\n                }\r\n            },\r\n            \"login\": null,\r\n            \"oao\": null,\r\n            \"pageview\": \"https://www.nymcu.org\",\r\n            \"product\": {\r\n                \"category\": \"car loan\",\r\n                \"subcategory\": null,\r\n                \"url_type\": \"product\",\r\n                \"is_categorized\": true,\r\n                \"is_biz\": false,\r\n                \"url\": \"/hs-search-results\",\r\n                \"timestamp\": {{$timestamp}}\r\n            },\r\n            \"products\": {\r\n                \"car loan\": 1771968940328\r\n            },\r\n            \"referrer\": {\r\n                \"url\": \"\",\r\n                \"landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n                \"name\": \"\",\r\n                \"timestamp\": {{$timestamp}},\r\n                \"utm\": {}\r\n            },\r\n            \"search\": {\r\n                \"timestamp\": {{$timestamp}},\r\n                \"term\": \"auto loan\",\r\n                \"url\": \"term=auto+loan\",\r\n                \"category\": \"car loan\"\r\n            },\r\n            \"session\": {\r\n                \"2026-02-24\": {\r\n                    \"start\": 1771968973985,\r\n                    \"end\": 0\r\n                }\r\n            },\r\n            \"page\": {\r\n                \"path\": \"/home-ext\",\r\n                \"timestamp\": 1771968973986\r\n            }\r\n        },\r\n        \"mode\": \"revenue_per_member\",\r\n        \"models\": \"\",\r\n        \"org\": \"\",\r\n        \"page\": \"/home-ext\",\r\n        \"pixel\": \"\",\r\n        \"products_owned\": \"\",\r\n        \"products_recommended\": null,\r\n        \"referrer\": \"\",\r\n        \"suppress\": \"\",\r\n        \"use_distance_model\": \"\",\r\n        \"zipcode\": \"\",\r\n        \"actions\": {},\r\n        \"ads_viewed\": {\r\n            \"3677\": 1\r\n        },\r\n        \"ads_dismissed\": [],\r\n        \"alert_cookies\": {},\r\n        \"devices\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 820,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-24T21:36:13.371Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"id\": \"fcf09d90-b78f-4df5-bf98-02f6f48001f4\",\r\n        \"log\": {},\r\n        \"visits\": {\r\n            \"2026-02-24\": {\r\n                \"start\": 1771968974239,\r\n                \"end\": 1771969242997\r\n            }\r\n        },\r\n        \"session_init\": \"1\",\r\n        \"debug_all\": \"1\",\r\n        \"scoring\": [\r\n            {\r\n                \"car loan\": \"1.00\"\r\n            }\r\n        ],\r\n        \"querystring\": \"?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referrering_landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referrering_landing_page\": \"https://www.nymcu.org/\",\r\n        \"debug_ads\": true,\r\n        \"domain\": \"www.nymcu.org\",\r\n        \"timestamp\": 1771969245951\r\n    },\r\n    \"is_encrypted\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{fullUrl}}",
+          "host": [
+            "{{fullUrl}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Heloc",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "utils.findFirstAd('hero-round-image', 'Home Hero: Home Equity Loan', 'class')\r",
+              "utils.algCheck('url', 'home equity loan')"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Dest",
+            "value": "empty",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Mode",
+            "value": "cors",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Site",
+            "value": "cross-site",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Not_A Brand\";v=\"99\", \"Google Chrome\";v=\"109\", \"Chromium\";v=\"109\"",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?0",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Windows\"",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"payload\": {\r\n        \"cu_id\": \"60153\",\r\n        \"v\": \"1\",\r\n        \"demographics\": {\r\n            \"zip\": \"94022\",\r\n            \"segments\": {\r\n                \"firsttime\": {\r\n                    \"timestamp\": 1771977723660\r\n                }\r\n            }\r\n        },\r\n        \"zipcode_param\": false,\r\n        \"emulation_date\": \"\",\r\n        \"device\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 637,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-25T00:09:52.913Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"host_env\": \"stg\",\r\n        \"ga_id\": \"1684248120.1771967835\",\r\n        \"ip\": \"172.125.77.226\",\r\n        \"last\": {\r\n            \"device\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"location\": {\r\n                \"zipcode\": \"94022\",\r\n                \"geoname_id\": 5368335,\r\n                \"ip\": \"172.125.77.226\",\r\n                \"city\": \"Los Altos\",\r\n                \"state\": \"CA\",\r\n                \"country\": \"United States\",\r\n                \"metro_code\": 807,\r\n                \"latitude\": 37.3793,\r\n                \"longitude\": -122.12,\r\n                \"isp\": null,\r\n                \"organization\": null,\r\n                \"timezone\": \"America/Los_Angeles\",\r\n                \"state_name\": \"California\",\r\n                \"segments\": {\r\n                    \"94022\": 0.5001,\r\n                    \"firsttime\": 0.9999727735696016,\r\n                    \"-member\": 0.9999999986366818,\r\n                    \"-business\": 0.9999999986319447\r\n                },\r\n                \"browser_data\": {\r\n                    \"device_type\": \"desktop\"\r\n                }\r\n            },\r\n            \"login\": null,\r\n            \"oao\": null,\r\n            \"pageview\": \"https://www.nymcu.org\",\r\n            \"product\": {\r\n                \"category\": \"home equity loan\",\r\n                \"subcategory\": null,\r\n                \"url_type\": \"product\",\r\n                \"is_categorized\": true,\r\n                \"is_biz\": false,\r\n                \"url\": \"/lending/consumer-lending/home-equity-fixed-loan\",\r\n                \"timestamp\": {{$timestamp}}\r\n            },\r\n            \"products\": {\r\n                \"home equity loan\": 1771977842524\r\n            },\r\n            \"referrer\": {\r\n                \"url\": \"\",\r\n                \"landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n                \"name\": \"\",\r\n                \"timestamp\": {{$timestamp}},\r\n                \"utm\": {}\r\n            },\r\n            \"search\": {},\r\n            \"session\": {\r\n                \"2026-02-24\": {\r\n                    \"start\": 1771977866067,\r\n                    \"end\": 0\r\n                }\r\n            },\r\n            \"page\": {\r\n                \"path\": \"/home-ext\",\r\n                \"timestamp\": {{$timestamp}}\r\n            }\r\n        },\r\n        \"mode\": \"revenue_per_member\",\r\n        \"models\": \"\",\r\n        \"org\": \"\",\r\n        \"page\": \"/home-ext\",\r\n        \"pixel\": \"\",\r\n        \"products_owned\": \"\",\r\n        \"products_recommended\": null,\r\n        \"referrer\": \"\",\r\n        \"suppress\": \"\",\r\n        \"use_distance_model\": \"\",\r\n        \"zipcode\": \"\",\r\n        \"actions\": {},\r\n        \"ads_viewed\": {\r\n            \"3678\": 1\r\n        },\r\n        \"ads_dismissed\": [],\r\n        \"alert_cookies\": {},\r\n        \"devices\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 871,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-25T00:04:25.137Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"id\": \"32cd4260-c7ce-43a0-b8b0-5160b06e66a0\",\r\n        \"log\": {},\r\n        \"visits\": {\r\n            \"2026-02-24\": {\r\n                \"start\": 1771977866266,\r\n                \"end\": 1771978190720\r\n            }\r\n        },\r\n        \"session_init\": \"1\",\r\n        \"debug_all\": \"1\",\r\n        \"scoring\": [\r\n            {\r\n                \"home equity loan\": \"2.00\"\r\n            }\r\n        ],\r\n        \"querystring\": \"?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referrering_landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referring_url\": \"https://www.nymcu.org/?cb=1&ad_ids=3678\",\r\n        \"session_referrering_landing_page\": \"https://www.nymcu.org/\",\r\n        \"debug_ads\": true,\r\n        \"domain\": \"www.nymcu.org\",\r\n        \"timestamp\": 1771978193461\r\n    },\r\n    \"is_encrypted\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{fullUrl}}",
+          "host": [
+            "{{fullUrl}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Mortgages TS",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "utils.findFirstAd('hero-round-image', 'Home Hero: Mortgage', 'class')\r",
+              "utils.algCheck('', 'mortgage') // \"querystring\": \"?products_recommended=mortgage\", no url/history"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "https://www.nymcu.org/home-ex",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Dest",
+            "value": "empty",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Mode",
+            "value": "cors",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Site",
+            "value": "cross-site",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Not_A Brand\";v=\"99\", \"Google Chrome\";v=\"109\", \"Chromium\";v=\"109\"",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?0",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Windows\"",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"payload\": {\r\n        \"cu_id\": \"60153\",\r\n        \"v\": \"1\",\r\n        \"demographics\": {\r\n            \"zip\": \"94107\",\r\n            \"segments\": {\r\n                \"firsttime\": {\r\n                    \"timestamp\": 1771981601161\r\n                }\r\n            }\r\n        },\r\n        \"zipcode_param\": false,\r\n        \"emulation_date\": null,\r\n        \"device\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Mac OS\",\r\n            \"type\": \"browser\",\r\n            \"width\": 1800,\r\n            \"height\": 428,\r\n            \"ua\": \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-25T01:07:09.421Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"host_env\": \"stg\",\r\n        \"ga_id\": \"1767069666.1770942794\",\r\n        \"ip\": \"136.24.103.52\",\r\n        \"last\": {\r\n            \"device\": \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"location\": {\r\n                \"zipcode\": \"94107\",\r\n                \"geoname_id\": 5391959,\r\n                \"ip\": \"136.24.103.52\",\r\n                \"city\": \"San Francisco\",\r\n                \"state\": \"CA\",\r\n                \"country\": \"United States\",\r\n                \"metro_code\": 807,\r\n                \"latitude\": 37.7642,\r\n                \"longitude\": -122.3993,\r\n                \"isp\": null,\r\n                \"organization\": null,\r\n                \"timezone\": \"America/Los_Angeles\",\r\n                \"state_name\": \"California\"\r\n            },\r\n            \"login\": null,\r\n            \"oao\": null,\r\n            \"pageview\": \"https://www.nymcu.org\",\r\n            \"product\": null,\r\n            \"products\": {},\r\n            \"referrer\": {\r\n                \"url\": \"https://ext-tickets.atlassian.net/\",\r\n                \"landing_page\": \"https://www.nymcu.org/home-ext?products_recommended=mortgage\",\r\n                \"name\": \"\",\r\n                \"timestamp\": 1771981629435,\r\n                \"utm\": {}\r\n            },\r\n            \"session\": {\r\n                \"2026-02-24\": {\r\n                    \"start\": 1771981616868,\r\n                    \"end\": 0\r\n                }\r\n            },\r\n            \"page\": {\r\n                \"path\": \"/home-ext\",\r\n                \"timestamp\": 1771981616868\r\n            }\r\n        },\r\n        \"last_product_url\": \"\",\r\n        \"mode\": \"revenue_per_member\",\r\n        \"models\": \"\",\r\n        \"org\": null,\r\n        \"page\": \"/home-ext\",\r\n        \"pixel\": \"\",\r\n        \"products_owned\": \"\",\r\n        \"products_recommended\": \"mortgage\",\r\n        \"referrer\": \"\",\r\n        \"suppress\": \"\",\r\n        \"use_distance_model\": \"\",\r\n        \"zipcode\": \"94107\",\r\n        \"actions\": {},\r\n        \"ads_dismissed\": [],\r\n        \"id\": \"ac0e1fe4-71b2-4c46-a234-3a40043b564c\",\r\n        \"visits\": {\r\n            \"2026-02-24\": {\r\n                \"start\": 1771981617274,\r\n                \"end\": 1771981627809\r\n            }\r\n        },\r\n        \"scoring\": [],\r\n        \"querystring\": \"?products_recommended=mortgage\",\r\n        \"debug_ads\": true,\r\n        \"session_referring_url\": \"https://www.nymcu.org/?cb=1&debug_all=1&session_init=1\",\r\n        \"original_referring_url\": \"https://www.nymcu.org/home-ext\",\r\n        \"session_referrering_landing_page\": \"https://www.nymcu.org/\",\r\n        \"original_referrering_landing_page\": \"https://www.nymcu.org/home-ext\",\r\n        \"domain\": \"www.nymcu.org\"\r\n    },\r\n    \"is_encrypted\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{fullUrl}}",
+          "host": [
+            "{{fullUrl}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Checking Account attempted fix",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "utils.findFirstAd('hero-round-image', 'Home Hero: Checking Account', 'class')\r",
+              "utils.algCheck('url', 'checking account')"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "https://www.nymcu.org",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "https://www.nymcu.org/home-ext?debug_all=1&cb=1",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Dest",
+            "value": "empty",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Mode",
+            "value": "cors",
+            "type": "text"
+          },
+          {
+            "key": "Sec-Fetch-Site",
+            "value": "cross-site",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Not_A Brand\";v=\"99\", \"Google Chrome\";v=\"109\", \"Chromium\";v=\"109\"",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?0",
+            "type": "text"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Windows\"",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"payload\": {\r\n        \"cu_id\": \"60153\",\r\n        \"v\": \"1\",\r\n        \"demographics\": {\r\n            \"zip\": \"94022\",\r\n            \"segments\": {\r\n                \"firsttime\": {\r\n                    \"timestamp\": {{$timestamp}}\r\n                }\r\n            }\r\n        },\r\n        \"zipcode_param\": false,\r\n        \"emulation_date\": null,\r\n        \"device\": {\r\n            \"name\": \"chrome\",\r\n            \"version\": \"145.0.0\",\r\n            \"os\": \"Windows 10\",\r\n            \"type\": \"browser\",\r\n            \"width\": 791,\r\n            \"height\": 765,\r\n            \"ua\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"date\": \"2026-02-24T16:11:08.495Z\",\r\n            \"form_factor\": \"desktop\"\r\n        },\r\n        \"host_env\": \"stg\",\r\n        \"ga_id\": \"700559612.1771949299\",\r\n        \"ip\": \"172.125.77.226\",\r\n        \"last\": {\r\n            \"device\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\",\r\n            \"location\": {\r\n                \"zipcode\": \"94022\",\r\n                \"geoname_id\": 5368335,\r\n                \"ip\": \"172.125.77.226\",\r\n                \"city\": \"Los Altos\",\r\n                \"state\": \"CA\",\r\n                \"country\": \"United States\",\r\n                \"metro_code\": 807,\r\n                \"latitude\": 37.3793,\r\n                \"longitude\": -122.12,\r\n                \"isp\": null,\r\n                \"organization\": null,\r\n                \"timezone\": \"America/Los_Angeles\",\r\n                \"state_name\": \"California\"\r\n            },\r\n            \"login\": null,\r\n            \"oao\": null,\r\n            \"pageview\": \"https://www.nymcu.org\",\r\n            \"product\": {\r\n                \"category\": \"checking account\",\r\n                \"subcategory\": null,\r\n                \"url_type\": \"product\",\r\n                \"is_categorized\": true,\r\n                \"is_biz\": false,\r\n                \"url\": \"https://www.nymcu.org/personal-banking/checking\",\r\n                \"timestamp\": {{$timestamp}}\r\n            },\r\n            \"products\": {\r\n                \"checking account\": {{$timestamp}}\r\n            },\r\n            \"referrer\": {\r\n                \"url\": \"\",\r\n                \"landing_page\": \"https://www.nymcu.org/home-ext?debug_all=1&cb=1\",\r\n                \"name\": \"\",\r\n                \"timestamp\": {{$timestamp}},\r\n                \"utm\": {}\r\n            },\r\n            \"session\": {\r\n                \"2026-02-24\": {\r\n                    \"start\": {{$timestamp}},\r\n                    \"end\": 0\r\n                }\r\n            },\r\n            \"page\": {\r\n                \"path\": \"/home-ext\",\r\n                \"timestamp\": {{$timestamp}}\r\n            }\r\n        },\r\n        \"last_product_url\": \"https://www.nymcu.org/personal-banking/checking\",\r\n        \"mode\": \"revenue_per_member\",\r\n        \"models\": \"\",\r\n        \"org\": null,\r\n        \"page\": \"/home-ext\",\r\n        \"pixel\": \"\",\r\n        \"products_owned\": \"\",\r\n        \"products_recommended\": null,\r\n        \"referrer\": \"https://www.nymcu.org/home-ext?debug_all=1&cb=1\",\r\n        \"suppress\": \"\",\r\n        \"use_distance_model\": \"\",\r\n        \"zipcode\": \"94022\",\r\n        \"actions\": {},\r\n        \"ads_dismissed\": [],\r\n        \"id\": \"cce2bc06-41cf-4a27-a45a-eebf0e61783d\",\r\n        \"visits\": {\r\n            \"2026-02-24\": {\r\n                \"start\": {{$timestamp}},\r\n                \"end\": 0\r\n            }\r\n        },\r\n        \"debug_all\": \"1\",\r\n        \"scoring\": [\r\n            {\r\n                \"checking account\": \"1.00\"\r\n            }\r\n        ],\r\n        \"querystring\": \"?debug_all=1&cb=1\",\r\n        \"debug_ads\": true,\r\n        \"session_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referring_url\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"session_referrering_landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"original_referrering_landing_page\": \"https://www.nymcu.org/home-ext?session_init=1&debug_all=1&cb=1\",\r\n        \"domain\": \"www.nymcu.org\"\r\n    },\r\n    \"is_encrypted\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{fullUrl}}",
+          "host": [
+            "{{fullUrl}}"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "auth": {
+    "type": "oauth2",
+    "oauth2": [
+      {
+        "key": "headerPrefix",
+        "value": "Token",
+        "type": "string"
+      },
+      {
+        "key": "addTokenTo",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "var jsonData = pm.response.json();",
+          "var ads = (jsonData && jsonData.ads) ? jsonData.ads : [];",
+          "",
+          "// --- Base collection-level tests ---",
+          "pm.test(\"Status code is 200\", function () {",
+          "    pm.response.to.have.status(200);",
+          "});",
+          "pm.test(\"More than 0 ads: \" + String(ads.length) + \" ad(s)\", function () {",
+          "    pm.expect(ads.length).to.greaterThan(0);",
+          "});",
+          "pm.test(\"Validation Errors\", function () {",
+          "   pm.expect(jsonData.errors).to.eql(false);",
+          "});",
+          "pm.test(\"Validation Errors\", function () {",
+          "    if(jsonData.errors !== undefined) {",
+          "        pm.expect(jsonData.errors).to.eql(false); ",
+          "    } else {",
+          "        pm.expect(jsonData.errors).to.not.exist; ",
+          "    }",
+          "});",
+          "",
+          "// --- utils object definition ---",
+          "utils = {",
+          "    findFirstAd: function(div_id, name, div_type='class') {",
+          "        var is_good = false;",
+          "        var arr = ads;",
+          "        var isInt = false;",
+          "        if (!isNaN(parseInt(div_id)) && Number.isInteger(Number(div_id))) {",
+          "            isInt = true;",
+          "        }",
+          "",
+          "        if (isInt && div_type === 'ad_ids') {",
+          "            var thistest = arr.find(ad => parseInt(ad.id) === div_id || ad.id.toString() === div_id.toString());",
+          "        } else if (div_type == 'class') {",
+          "            var thistest = arr.find(element => element.div_class == div_id);",
+          "        } else {",
+          "            var thistest = arr.find(element => element.div_id == div_id);",
+          "        }",
+          "",
+          "        if (isInt) {",
+          "            is_good = thistest !== undefined;",
+          "        } else {",
+          "            if (thistest != undefined && thistest.name == name) {",
+          "                is_good = true;",
+          "            } else {",
+          "                is_good = false;",
+          "            }",
+          "        }",
+          "        pm.test(\"Ad Name: \" + div_id + \" \" + (name ? name : \"\"), function() {",
+          "            pm.expect(is_good).to.eql(true)",
+          "        });",
+          "    },",
+          "",
+          "    algCheck: function(alg, core_product='') {",
+          "        var allgood = [];",
+          "        var arr = ads;",
+          "        for (let i = 0; i < arr.length; i++) {",
+          "            var checkit = false;",
+          "            ad = arr[i];",
+          "            if (core_product != '' && ad.core_product === core_product) {",
+          "                checkit = true;",
+          "            } else if (core_product === '' && ad.core_product === core_product) {",
+          "                checkit = true;",
+          "            } else if (core_product === '' && !ad.core_product) {",
+          "                checkit = true;",
+          "            }",
+          "            if (checkit === true && ad.algorithms.includes(alg)) {",
+          "                allgood.push(true);",
+          "            }",
+          "        }",
+          "        let checker = res => res.every(v => v === true);",
+          "",
+          "        if (allgood.length > 0) {",
+          "            is_good = checker(allgood);",
+          "        } else {",
+          "            is_good = false;",
+          "        }",
+          "        pm.test(\"Algorithm: \" + alg + \" \" + core_product, function() {",
+          "            pm.expect(is_good).to.eql(true)",
+          "        });",
+          "    }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "finalyticsClient",
+      "value": "Apple"
+    }
+  ]
+}

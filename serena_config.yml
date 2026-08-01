@@ -1,0 +1,53 @@
+# Serena MCP Server Configuration for Fintests Project
+# Global configuration for the Serena Model Context Protocol server
+
+# Server settings
+server:
+  port: 8002
+  host: "localhost"
+  transport: "stdio"  # Options: stdio, sse
+  
+# Language server settings
+language_servers:
+  # Python language server for Playwright/pytest tests
+  python:
+    enabled: true
+    command: "pylsp"
+    args: []
+    
+  # JavaScript language server (for any JS test utilities)
+  javascript:
+    enabled: true
+    command: "typescript-language-server"
+    args: ["--stdio"]
+    
+  # HTML/CSS language server
+  html:
+    enabled: true
+    command: "vscode-html-language-server"
+    args: ["--stdio"]
+
+# Project settings
+projects:
+  default_context: "ide-assistant"
+  
+# Security settings
+security:
+  read_only: false  # Set to true to prevent file modifications
+  allowed_paths:
+    - "/home/ubuntu/projects/fintests"
+  blocked_paths:
+    - "/home/ubuntu/projects/fintests/.env"
+    - "/home/ubuntu/projects/fintests/**/*credentials*"
+    - "/home/ubuntu/projects/fintests/**/*secret*"
+    - "/home/ubuntu/projects/fintests/**/*password*"
+
+# Logging settings
+logging:
+  level: "INFO"
+  file: "/home/ubuntu/projects/fintests/logs/serena.log"
+  
+# Dashboard settings (optional web interface)
+dashboard:
+  enabled: true
+  port: 24282  # Actual port used by Serena server

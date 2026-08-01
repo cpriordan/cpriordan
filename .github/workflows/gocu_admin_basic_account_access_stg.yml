@@ -1,0 +1,98 @@
+name: GOCU — Admin Basic Account Access (STG)
+
+# ── Triggers ──────────────────────────────────────────────────────────────────
+#
+# Manual only — this test logs into the live admin portal with 2FA, so it is
+# run on demand rather than on every push.
+#
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: Target environment
+        required: true
+        type: choice
+        options: [stg]
+        default: stg
+
+concurrency:
+  group: gocu-admin-basic-account-access-${{ github.event.inputs.env || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  admin-basic-account-access:
+    name: GOCU — Basic Admin Account Access (${{ github.event.inputs.env || 'stg' }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
+    env:
+      TEST_ENVIRONMENT: ${{ github.event.inputs.env || 'stg' }}
+      HEADLESS: "true"
+      DEFAULT_TIMEOUT: "40000"
+      FINDATA_GOCU_USER: ${{ secrets.FINDATA_GOCU_USER }}
+      FINDATA_GOCU_PW: ${{ secrets.FINDATA_GOCU_PW }}
+      FINDATA_GOCU_OTP: ${{ secrets.FINDATA_GOCU_OTP }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: refactored_tests
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt pytest-html
+
+      - name: Install Playwright browsers
+        run: playwright install --with-deps chromium
+
+      - name: Run GOCU basic admin account access test
+        id: run_tests
+        run: |
+          pytest pytests/ADMINSITETESTS/test_findata_stg_login_gocu_basic_admin_account_access.py \
+            -v --tb=short \
+            --junitxml=gocu_admin_basic_access_results.xml \
+            --html=gocu_admin_basic_access_report.html --self-contained-html \
+            -p no:warnings
+        continue-on-error: true
+
+      - name: Write step summary
+        if: always()
+        run: |
+          echo "## GOCU — Basic Admin Account Access (${{ env.TEST_ENVIRONMENT }})" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.run_tests.outcome }}" == "success" ]; then
+            echo "✅ **PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **FAILED** — download the HTML report artifact for details" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Triggered by: \`${{ github.event_name }}\` on \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload HTML report + JUnit XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gocu-admin-basic-access-report-${{ env.TEST_ENVIRONMENT }}
+          path: |
+            gocu_admin_basic_access_report.html
+            gocu_admin_basic_access_results.xml
+          retention-days: 14
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gocu-admin-basic-access-screenshots-${{ env.TEST_ENVIRONMENT }}
+          path: pytests/ADMINSITETESTS/screenshots_adminsite_using_pytest/admin_access/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Fail job if tests failed
+        if: steps.run_tests.outcome == 'failure'
+        run: exit 1

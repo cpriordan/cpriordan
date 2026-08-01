@@ -1,0 +1,9 @@
+﻿target_url,scenario_url,client,company_setting,username,password,hero_selector
+https://www.globalcu.org/?debug_all=1&session_init=1,https://www.globalcu.org/accounts/ways-to-save/savings-account/,glbl,milky_way_release_PROD,,,.hero
+https://www.1stunitedcu.org/?debug_all=1&session_init=1,https://www.1stunitedcu.org/loans-and-credit/product/personal-loans-and-lines,u1st,milky_way_release_PROD,,,div.hero
+https://www.missionfed.com/?debug_all=1&session_init=1,https://www.missionfed.com/home-loans/home-equity-line-of-credit/,missionfed,milky_way_release_PROD,,,.hero
+https://www.georgiasown.org/?debug_all=1&session_init=1,https://www.georgiasown.org/checking,gocu,milky_way_release_PROD,,,.hero
+https://www.oneazcu.com/?debug_all=1&session_init=1,https://www.oneazcu.com/business/,oneaz,milky_way_release_PROD,,,#homeSlider
+https://www.silverstatecu.com/?debug_all=1&session_init=1,https://www.silverstatecu.com/loans-and-credit-cards/credit-cards,ssscu,milky_way_release_PROD,,,.hero
+https://www.statewidefcu.org/?debug_all=1&session_init=1,https://www.statewidefcu.org/rv-boat-and-motorcycle-loans/,swfcu,milky_way_release_PROD,,,.co-home_hero
+https://trustonefinancial.org/?debug_all=1&session_init=1,https://trustonefinancial.org/personal/borrow/auto-and-recreational-loans/auto-loans,tru,milky_way_release_PROD,,,.hero

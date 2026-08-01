@@ -1,0 +1,243 @@
+name: Fin UI Search Tests — STG (post JS deploy)
+
+# ── Triggers ──────────────────────────────────────────────────────────────────
+#
+# Primary : repository_dispatch — fired by the JS deploy workflow in
+#           github.com/Finalytics-ai/fin-personalization-js after a successful
+#           STG deploy. The JS workflow must include a step like:
+#
+#   - name: Trigger search tests
+#     uses: peter-evans/repository-dispatch@v3
+#     with:
+#       token: ${{ secrets.TESTS_REPO_PAT }}
+#       repository: <this-repo>
+#       event-type: js-deploy-stg-success
+#       client-payload: '{"env": "stg"}'
+#
+#   TESTS_REPO_PAT must be a PAT with `repo` scope stored as a secret in the
+#   fin-personalization-js repo.
+#
+# Fallback: workflow_dispatch — manual run from the Actions tab.
+#
+on:
+  repository_dispatch:
+    types: [js-deploy-stg-success]
+
+  workflow_dispatch:
+    inputs:
+      env:
+        description: Target environment
+        required: true
+        type: choice
+        options: [stg, prod]
+        default: stg
+
+concurrency:
+  group: fin-ui-search-tests-${{ github.event.client_payload.env || github.event.inputs.env || github.run_id }}
+  cancel-in-progress: true
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SEARCH TRIGGER TESTS  (one parallel job per client)
+# ═══════════════════════════════════════════════════════════════════════════════
+jobs:
+  search-tests:
+    name: ${{ matrix.display }} — Search (${{ github.event.client_payload.env || github.event.inputs.env || 'stg' }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'repository_dispatch'
+
+    env:
+      TEST_ENV: ${{ github.event.client_payload.env || github.event.inputs.env || 'stg' }}
+      HEADLESS: "true"
+      DEFAULT_TIMEOUT: "40000"
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+
+          - client: gocu
+            display: "GOCU — Youth Checking"
+            test: fin-ui-tests/test_gocu_youthchecking_stgtags_and_js_errors_search.py
+            screenshots: screenshots_gocu_using_pytest/
+
+          - client: swfcu
+            display: "SWFCU — RV/Boat Loan"
+            test: fin-ui-tests/test_swfcu_rvboatloan_stgtags_and_js_errors_search.py
+            screenshots: screenshots_swfcu_using_pytest/
+
+          - client: tru
+            display: "TRU — Checking"
+            test: fin-ui-tests/test_tru_multiproduct_stgtags_and_js_errors_search.py
+            screenshots: screenshots_tru_using_pytest/
+
+          - client: u1st
+            display: "U1st — Personal Loans"
+            test: fin-ui-tests/test_u1st_personal_stgtags_and_js_errors_search.py
+            screenshots: screenshots_u1st_using_pytest/
+
+          - client: ssscu
+            display: "SSSCU — Credit Cards"
+            test: fin-ui-tests/test_ssscu_creditcards_stgtags_and_js_errors_search.py
+            screenshots: screenshots_ssscu_using_pytest/
+
+          - client: glbl
+            display: "Global — Money Market"
+            test: fin-ui-tests/test_global_mma_stgtags_and_js_errors_search.py
+            screenshots: screenshots_glbl_using_pytest/
+
+          - client: nymcu-checking-search
+            display: "Municipal — Checking Search"
+            test: fin-ui-tests/test_nymcu_checking_search_STG.py
+            screenshots: screenshots_nymcu_checking_search_using_pytest/
+
+          - client: langley-certificate-search
+            display: "Langley — Certificate Search"
+            test: fin-ui-tests/test_langley_certificate_search_STG.py
+            screenshots: screenshots_langley_certificate_search_using_pytest/
+
+          - client: uhfcu-carloan-search
+            display: "UHFCU — Car Loan Search"
+            test: fin-ui-tests/test_uhfcu_carloan_search_STG.py
+            screenshots: screenshots_uhfcu_carloan_search_using_pytest/
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt pytest-html
+
+      - name: Install Playwright browsers
+        run: playwright install --with-deps chromium
+
+      - name: Display trigger info
+        run: |
+          echo "Client      : ${{ matrix.client }}"
+          echo "Environment : ${{ env.TEST_ENV }}"
+          echo "Trigger     : ${{ github.event_name }}${{ github.event.action != '' && format(' ({0})', github.event.action) || '' }}"
+          echo "Branch      : ${{ github.ref_name }}"
+
+      - name: Run ${{ matrix.display }} search test
+        id: run_tests
+        run: |
+          pytest ${{ matrix.test }} \
+            -v --tb=short \
+            --reruns 1 --reruns-delay 15 \
+            --junitxml=${{ matrix.client }}_search_results.xml \
+            --html=${{ matrix.client }}_search_report.html --self-contained-html \
+            -p no:warnings
+        continue-on-error: true
+
+      - name: Write step summary
+        if: always()
+        run: |
+          echo "## ${{ matrix.display }} — Search (${{ env.TEST_ENV }})" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.run_tests.outcome }}" == "success" ]; then
+            echo "✅ **PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **FAILED** — download the HTML report artifact for details" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Triggered by: \`${{ github.event_name }}\` on \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload HTML report + JUnit XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.client }}-search-report-${{ env.TEST_ENV }}
+          path: |
+            ${{ matrix.client }}_search_report.html
+            ${{ matrix.client }}_search_results.xml
+          retention-days: 14
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.client }}-search-screenshots-${{ env.TEST_ENV }}
+          path: ${{ matrix.screenshots }}
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Fail job if tests failed
+        if: steps.run_tests.outcome == 'failure'
+        run: exit 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LISTERHILL — standalone script (not pytest), search-trigger (IRA)
+# ═══════════════════════════════════════════════════════════════════════════════
+  listerhill:
+    name: Listerhill — IRA Search (${{ github.event.client_payload.env || github.event.inputs.env || 'stg' }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'repository_dispatch'
+
+    env:
+      TEST_ENV: ${{ github.event.client_payload.env || github.event.inputs.env || 'stg' }}
+      HEADLESS: "true"
+      DEFAULT_TIMEOUT: "40000"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright browsers
+        run: playwright install --with-deps chromium
+
+      - name: Run Listerhill IRA search
+        id: run_tests
+        working-directory: fin-ui-tests
+        run: python test_listerhill_ira_search.py
+        continue-on-error: true
+
+      - name: Write step summary
+        if: always()
+        run: |
+          echo "## Listerhill — IRA Search (${{ env.TEST_ENV }})" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.run_tests.outcome }}" == "success" ]; then
+            echo "✅ **PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **FAILED** — check job logs for scenario-level details" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: listerhill-search-screenshots-${{ env.TEST_ENV }}
+          path: fin-ui-tests/screenshots_listerhill/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Fail job if tests failed
+        if: steps.run_tests.outcome == 'failure'
+        run: exit 1

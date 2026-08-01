@@ -1,0 +1,26 @@
+{
+  "name": "pr226-suggested-tests",
+  "version": "1.0.0",
+  "description": "Jest unit tests suggested by AI Test Agent for PR #226",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:verbose": "jest --verbose"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "jsdom": "^24.0.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "verbose": true,
+    "collectCoverageFrom": [
+      "**/*.test.js"
+    ],
+    "testMatch": [
+      "**/*.test.js"
+    ]
+  }
+}

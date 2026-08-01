@@ -1,0 +1,160 @@
+import pytest
+import pytest_asyncio
+import sys
+import os
+import time
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+
+# Add parent directory to path for qa_tools import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import consolidated functions from qa_tools
+from qa_tools import (
+    clear_screenshots_directory,
+    save_page_source_async,
+    detect_js_errors_from_specific_files_async,
+    wait_for_js_and_element_async,
+    validate_finalytics_tags,
+    setup_screenshots_directory,
+    get_common_js_files,
+    get_common_finalytics_tags,
+    browser)
+
+async def wait_for_js_and_element(page, hero_heading_selector, timeout=40000):
+    """
+    Waits for the document to be fully loaded and for a specific element to become visible.
+    """
+    try:
+        print("Waiting for the document to be fully loaded...")
+        await page.evaluate('''new Promise(resolve => {
+            if (document.readyState === 'complete') {
+                resolve();
+            } else {
+                window.addEventListener('load', resolve);
+            }
+        });''')
+
+        print(f"Waiting for the element '{hero_heading_selector}' to become visible...")
+
+        await page.wait_for_function(
+            f'document.querySelector("{hero_heading_selector}") !== null && '
+            f'document.querySelector("{hero_heading_selector}").offsetHeight > 0',
+            timeout=timeout
+        )
+        print(f"Element '{hero_heading_selector}' is now visible.")
+    except PlaywrightTimeoutError as e:
+        pytest.fail(f"Timeout waiting for element '{hero_heading_selector}' to become visible: {e}")
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "browser",
+    [{"username": "", "password": ""}],
+    indirect=True,
+)
+async def test_vys_mortgage_stgtags_and_js_errors(
+    browser,
+    homepage_url="https://www.stgfinalyticsdemo.com/?api=stg",
+    test_scenario_url="https://www.stgfinalyticsdemo.com/personal/borrow/home-loans/mortgages",
+    expected_heading="Mortgage Rates as Low as 5.1%",
+    hero_heading_selector=".col-md-8 > h1:nth-child(1)",
+    client="vys",
+    html_finalytics_stg_cloudfront="//d1v4vw9mwf7wyh.cloudfront.net",
+    html_finalytics_stg_cloudfront2="https://d1v4vw9mwf7wyh.cloudfront.net",
+    finalytics_css_tag="finalytics-function_div.css",
+    finalytics_js_tag="finalytics.js",
+    finalytics_function_js_tag="finalytics-function.js",
+    finalytics_settings_div_js_tag="settings_div.js",
+):
+    print(f"Starting {client} hero ad test..")
+
+    screenshots_directory = setup_screenshots_directory(client)
+
+    page = await browser.new_page()
+
+    specific_js_files = get_common_js_files()
+    error_tracker = []
+    await detect_js_errors_from_specific_files_async(client, page, specific_js_files, error_tracker, screenshots_directory)
+
+    try:
+        print(f"Going to homepage_url {homepage_url}...")
+        await page.goto(homepage_url, timeout=60000)
+        await page.wait_for_load_state('networkidle', timeout=60000)
+        # await page.wait_for_load_state('domcontentloaded', timeout=60000)
+        # await page.wait_for_load_state('load', timeout=60000)
+        # time.sleep(15)
+        await page.screenshot(path=f'{screenshots_directory}/homepage_screenshot.png')
+
+        print(f"Going to test_scenario_url {test_scenario_url}...")
+        await page.goto(test_scenario_url, timeout=60000)
+        await page.wait_for_load_state('networkidle', timeout=60000)
+        # await page.wait_for_load_state('domcontentloaded', timeout=60000)
+        # await page.wait_for_load_state('load', timeout=60000)
+        # time.sleep(15)
+        # await page.wait_for_load_state('networkidle', timeout=60000)
+        await page.screenshot(path=f'{screenshots_directory}/product_page_for_ad_screenshot.png')
+
+        print(f"Returning to homepage_url {homepage_url} to view the ad...")
+        retry_count = 0
+        max_retries = 2  # Adjust the maximum number of retries as needed
+
+        while retry_count < max_retries:
+            await page.goto(homepage_url, timeout=60000)
+            await page.wait_for_load_state('load', timeout=60000)
+            await page.wait_for_load_state('domcontentloaded', timeout=60000)
+            time.sleep(20)
+            print(f"Waiting for {hero_heading_selector} on the homepage...")
+            await page.screenshot(
+                path=f'{screenshots_directory}/homepage_before_selector_screenshot_retry_{retry_count}.png')
+            await wait_for_js_and_element_async(page, hero_heading_selector, timeout=60000)
+            await page.screenshot(path=f'{screenshots_directory}/hero_ad1_screenshot_retry_{retry_count}.png')
+
+            ad_heading = await page.locator(hero_heading_selector).inner_text()
+
+            if expected_heading == ad_heading:
+                print(f"Ad heading '{ad_heading}' matches expected heading '{expected_heading}'")
+                break  # Exit the loop if the heading matches
+            else:
+                print(
+                    f"Attempt {retry_count + 1}: Ad heading '{ad_heading}' does not match expected heading '{expected_heading}'")
+                retry_count += 1
+                if retry_count < max_retries:
+                    print("Refreshing the page and retrying...")
+                else:
+                    pytest.fail(f"Failed to match the expected heading after {max_retries} retries.")
+
+        # Proceed with further validations if the heading matched
+        if retry_count < max_retries:
+            # Verify the HTML snippet exists in the page source
+            html_content = await page.content()
+
+            # Modify to check for different possible tag HTML syntax since it can vary per client
+            desired_cloudfront_urls = (html_finalytics_stg_cloudfront, html_finalytics_stg_cloudfront2)
+
+            if not any(tag in html_content for tag in desired_cloudfront_urls):
+                pytest.fail(
+                    f"HTML Finalytics STG cloudfront URL '{html_finalytics_stg_cloudfront2}' NOT FOUND in the page source!"
+                )
+            else:
+                print(
+                    f"HTML Finalytics STG cloudfront URL '{html_finalytics_stg_cloudfront2}' exists in the homepage source.")
+
+            # Define JS and CSS tags
+            desired_finalytics_tags = [finalytics_css_tag, finalytics_js_tag, finalytics_function_js_tag,
+                                       finalytics_settings_div_js_tag]
+            # Check that all desired tags are present by looping through all the desired tags to check which ones are not in html_content and saves the ones that are missing
+            missing_desired_finalytics_tags = [tag for tag in desired_finalytics_tags if tag not in html_content]
+
+            if missing_desired_finalytics_tags:
+                pytest.fail(
+                    f"The following Finalytics finalytics tags were NOT found in the page source: {', '.join(missing_desired_finalytics_tags)}"
+                )
+            print(
+                f"The following Finalytics finalytics tags were found in the page source: {', '.join(desired_finalytics_tags)}")
+
+    except PlaywrightTimeoutError as e:
+        pytest.fail(f"Timeout encountered during navigation: {e}")
+    finally:
+        if error_tracker:
+            pytest.fail(f"Detected JavaScript errors: {error_tracker}")
+        else:
+            print(f"No JavaScript errors detected for {client}.")
